@@ -135,6 +135,12 @@ bool Display::apply(const config::Settings::Display& s, std::string* error) {
             if (error) *error = err;
             return false;
         }
+        // Leave fullscreen and move to the new monitor first; fullscreen always uses the window's monitor.
+        SDL_SetWindowFullscreen(window_.get(), false);
+        SDL_SyncWindow(window_.get());
+        SDL_SetWindowPosition(window_.get(), static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(info_.id)),
+                              static_cast<int>(SDL_WINDOWPOS_CENTERED_DISPLAY(info_.id)));
+        SDL_SyncWindow(window_.get());
     }
     const bool ok = applyMode(s, error);
     log::info("display: applied, {}", describe());
