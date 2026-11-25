@@ -72,3 +72,15 @@ TEST_CASE(settings_resolution_and_list_parsing) {
     CHECK_EQ(parts.size(), std::size_t{3});
     CHECK_EQ(parts[1], std::string("b"));
 }
+
+TEST_CASE(settings_powerup_types_validated_and_normalised) {
+    auto ok = loadSettings(IniDocument::parse("[Gameplay]\npowerups = 1\npowerup_types = Mend,shield\n"));
+    CHECK_EQ(ok.settings.gameplay.powerupTypes, std::string("shield, mend"));
+    CHECK_EQ(ok.invalidCount(), std::size_t{0});
+    auto bad = loadSettings(IniDocument::parse("[Gameplay]\npowerup_types = shield, rocket\n"));
+    CHECK_EQ(bad.settings.gameplay.powerupTypes, Settings::defaults().gameplay.powerupTypes);
+    CHECK_EQ(bad.invalidCount(), std::size_t{1});
+    auto none = loadSettings(IniDocument::parse("[Gameplay]\npowerups = 0\npowerup_types = none\n"));
+    CHECK(!none.settings.gameplay.powerups);
+    CHECK_EQ(none.settings.gameplay.powerupTypes, std::string("none"));
+}

@@ -87,3 +87,17 @@ service menu is then the way out.
 SDL virtual joysticks, so hotplug, gamepad type detection, assignment and disconnect handling are the
 real code paths. Physical hardware (real pads, Bluetooth, multiple keyboards, monitors, speakers) still
 has to be checked on the cabinet.
+
+**Powerups are earned on the circle and only help the one who earns them.** The rings come from the
+level script, so every station gets identical rings and identical chances; taking one is a timing
+skill (land a needle on it). No effect touches the shared rotation or another station, which keeps
+the brief's guarantees: one rotation for all, identical round conditions, independent collisions.
+No rings in sudden death, so tie-breaks stay pure.
+
+**Bots judge gaps by reachability, not by size alone.** On rounds where the circle swings back and
+forth, the widest gap can sit where the circle turns around and never reach the launcher; bots that
+waited for "the big gap" stalled until the round timer ran out. The bot now records which angles its
+own aim (timing error included) actually passes, aims for the best of those, sizes its safety margin
+from its own skill, and with patience settles for any spot it can make. A regression test replays
+the swing rounds with the seeds that used to stall.
+

@@ -15,7 +15,7 @@ namespace spindle::bots {
 namespace {
 
 constexpr int kMaxErrors = 20;
-constexpr long long kDecideBudget = 200'000;
+constexpr long long kDecideBudget = 400'000;
 
 void setNumber(lua_State* L, int table, const char* key, double v) {
     lua_pushnumber(L, v);
@@ -82,6 +82,8 @@ std::unique_ptr<BotBrain> BotBrain::create(const gameplay::ScriptSource& source,
 
     lua_createtable(L, 64, 0);
     brain->attachedRef_ = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_createtable(L, 4, 0);
+    brain->pickupsRef_ = luaL_ref(L, LUA_REGISTRYINDEX);
     lua_createtable(L, 0, 16);
     brain->obsRef_ = luaL_ref(L, LUA_REGISTRYINDEX);
     lua_createtable(L, 0, 8);
@@ -117,6 +119,19 @@ bool BotBrain::decide(const BotView& v) {
     lastAttachedLen_ = n;
     lua_pop(L, 1);
 
+    lua_rawgeti(L, LUA_REGISTRYINDEX, pickupsRef_);
+    const int np = static_cast<int>(v.pickups.size());
+    for (int i = 0; i < np; ++i) {
+        lua_pushnumber(L, v.pickups[static_cast<std::size_t>(i)]);
+        lua_rawseti(L, -2, i + 1);
+    }
+    for (int i = np; i < lastPickupsLen_; ++i) {
+        lua_pushnil(L);
+        lua_rawseti(L, -2, i + 1);
+    }
+    lastPickupsLen_ = np;
+    lua_pop(L, 1);
+
     lua_rawgeti(L, LUA_REGISTRYINDEX, decideRef_);
     lua_rawgeti(L, LUA_REGISTRYINDEX, obsRef_);
     const int obs = lua_gettop(L);
@@ -133,7 +148,12 @@ bool BotBrain::decide(const BotView& v) {
     setNumber(L, obs, "attach_angle", v.attachAngle);
     lua_pushboolean(L, v.fireReady ? 1 : 0);
     lua_setfield(L, obs, "fire_ready");
+    lua_rawgeti(L, LUA_REGISTRYINDEX, pickupsRef_);
+    lua_setfield(L, obs, "pickups");
+    setInteger(L, obs, "pickup_count", np);
+    setNumber(L, obs, "claim_angle", v.claimAngle);
     setNumber(L, obs, "round_time", v.roundTime);
+    setNumber(L, obs, "time_left", v.timeLeft);
     setNumber(L, obs, "delay", v.delay);
     setNumber(L, obs, "dt", v.dt);
     lua_rawgeti(L, LUA_REGISTRYINDEX, profileRef_);

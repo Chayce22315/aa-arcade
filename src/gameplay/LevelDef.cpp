@@ -52,6 +52,20 @@ std::optional<std::string> validateLevel(const LevelDef& level, const LevelLimit
         fastest = std::max(fastest, std::fabs(s.targetSpeed));
     }
     if (fastest < limits.minActiveSpeed) return std::string("the circle never turns fast enough to place needles");
+
+    if (level.pickups.size() > static_cast<std::size_t>(limits.maxPickups))
+        return std::format("{} powerup rings exceed {}", level.pickups.size(), limits.maxPickups);
+    for (std::size_t i = 0; i < level.pickups.size(); ++i) {
+        const Pickup& pk = level.pickups[i];
+        if (!std::isfinite(pk.angle)) return std::format("powerup ring {} is not finite", i);
+        if (!contains(limits.powerups, pk.kind)) return std::format("powerup '{}' is not enabled", powerupName(pk.kind));
+        for (double pin : level.prepins)
+            if (collision::angularDistance(pk.angle, pin) < limits.minSeparation * limits.pickupPrepinMargin)
+                return std::format("powerup ring {} sits too close to a pre-placed needle", i);
+        for (std::size_t j = 0; j < i; ++j)
+            if (collision::angularDistance(pk.angle, level.pickups[j].angle) < limits.minSeparation * limits.pickupSpacing)
+                return std::format("powerup rings {} and {} are too close", j, i);
+    }
     return std::nullopt;
 }
 

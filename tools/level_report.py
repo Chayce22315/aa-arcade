@@ -42,12 +42,12 @@ def main() -> int:
                 print(f"seed {seed} round {r['round']}: circle {float(r['packing']):.0%} full")
                 problems += 1
         if seed == 1:
-            print("round  launch  prepins  segments  max deg/s  reversals  packing")
+            print("round  launch  prepins  segments  max deg/s  reversals  packing  rings")
             for r in rows:
                 n = int(r["round"])
                 if n <= 5 or n % 10 == 0:
                     print(f"{n:5}  {r['launch']:>6}  {r['prepins']:>7}  {r['segments']:>8}  {float(r['max_speed_deg']):9.0f}  "
-                          f"{r['reversals']:>9}  {float(r['packing']):7.0%}")
+                          f"{r['reversals']:>9}  {float(r['packing']):7.0%}  {r['pickups']:>5}")
         launches = [int(r["launch"]) for r in rows]
         if any(b < a for a, b in zip(launches, launches[1:])):
             print(f"seed {seed}: launch count decreases somewhere")

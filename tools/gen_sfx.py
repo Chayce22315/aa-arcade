@@ -114,6 +114,20 @@ def winner() -> list[float]:
     return concat(*parts, last, gap=0.015)
 
 
+def powerup() -> list[float]:
+    notes = [988.0, 1319.0, 1760.0]
+    parts = [tone(lambda t, f=f: f * (1 + 0.6 * t), 0.06, ((1, 1.0), (3, 0.12)), attack=0.002, release=0.02) for f in notes]
+    shimmer = tone(lambda t: 2637.0, 0.22, ((1, 0.7), (2, 0.1)), attack=0.002, release=0.08, decay=0.07)
+    return concat(*parts, shimmer, gap=0.008)
+
+
+def shield() -> list[float]:
+    rnd = Noise(23)
+    burst = [rnd.next() * env(i / RATE, 0.05, attack=0.0005, release=0.02, decay=0.012) * 0.8 for i in range(int(0.05 * RATE))]
+    ring = tone(lambda t: 2300 - 900 * t, 0.3, ((1, 1.0), (2.76, 0.35), (5.4, 0.15)), attack=0.001, release=0.06, decay=0.09)
+    return mix(burst, ring)
+
+
 def round_start() -> list[float]:
     return tone(lambda t: 880, 0.12, ((1, 1.0), (2, 0.12)), attack=0.004, release=0.05, decay=0.09)
 
@@ -128,6 +142,8 @@ RECIPES = {
     "menu_select": menu_select,
     "winner": winner,
     "round_start": round_start,
+    "powerup": powerup,
+    "shield": shield,
 }
 
 

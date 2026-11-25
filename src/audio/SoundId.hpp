@@ -5,7 +5,7 @@
 
 namespace spindle::audio {
 
-enum class SoundId { NeedleHit, Fail, Clear, Coin, Join, MenuMove, MenuSelect, Winner, RoundStart, Count };
+enum class SoundId { NeedleHit, Fail, Clear, Coin, Join, MenuMove, MenuSelect, Winner, RoundStart, Powerup, Shield, Count };
 enum class SoundCategory { Sfx, Ui };
 
 struct SoundInfo {
@@ -25,6 +25,8 @@ inline constexpr std::array<SoundInfo, static_cast<std::size_t>(SoundId::Count)>
     {SoundId::MenuSelect, "audio/menu_select.wav", SoundCategory::Ui, "menu select"},
     {SoundId::Winner, "audio/winner.wav", SoundCategory::Sfx, "winner"},
     {SoundId::RoundStart, "audio/round_start.wav", SoundCategory::Sfx, "round start"},
+    {SoundId::Powerup, "audio/powerup.wav", SoundCategory::Sfx, "powerup"},
+    {SoundId::Shield, "audio/shield.wav", SoundCategory::Sfx, "shield"},
 }};
 
 } // namespace spindle::audio

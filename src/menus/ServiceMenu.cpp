@@ -7,6 +7,7 @@
 
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
+#include "gameplay/Powerups.hpp"
 #include "input/Keybinds.hpp"
 
 namespace spindle::menus {
@@ -343,6 +344,25 @@ void ServiceMenu::build(PageId id) {
             edit_.gameplay.seed = static_cast<std::uint32_t>(std::clamp(v, 0LL, 4294967295LL));
         };
         items.push_back(std::move(seed));
+        MenuItem powers = boolItem("powerups", edit_.gameplay.powerups);
+        powers.separatorBefore = true;
+        items.push_back(std::move(powers));
+        for (gameplay::PowerupKind kind : gameplay::kAllPowerups) {
+            MenuItem m;
+            m.label = std::format("  {} rings", gameplay::powerupName(kind));
+            m.value = [this, kind] {
+                return std::string(gameplay::contains(gameplay::parsePowerupList(edit_.gameplay.powerupTypes), kind) ? "on" : "off");
+            };
+            m.adjust = [this, kind](int) {
+                auto kinds = gameplay::parsePowerupList(edit_.gameplay.powerupTypes);
+                if (gameplay::contains(kinds, kind))
+                    std::erase(kinds, kind);
+                else
+                    kinds.push_back(kind);
+                edit_.gameplay.powerupTypes = gameplay::formatPowerupList(kinds);
+            };
+            items.push_back(std::move(m));
+        }
         break;
     }
     case PageId::Coin: {

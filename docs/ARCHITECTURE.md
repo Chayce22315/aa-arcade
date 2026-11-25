@@ -20,9 +20,9 @@ Dependency rule: nothing in the core includes SDL. The platform turns SDL into p
 | `assets/` | core: `EmbeddedAssets`, `Sha256`, `ControllerDbPin`; platform: `Downloader`, `ControllerDb` | resources compiled into the exe; the one optional download (WinHTTP, https only, size-capped, pinned SHA-256) |
 | `collision/` | core | pure angular maths: wrap, separation threshold `2 asin(r/L)`, flight-time contact tests, sub-step count |
 | `scripting/` | core | `LuaSandbox`: one isolated Lua 5.4 state with base/math/string/table only, a memory cap, an instruction budget per call and a seeded PCG32 `math.random` |
-| `gameplay/` | core | `Rotor` (the shared rotation), `Playfield` (one station: placements, flights, collision), `LevelDef` + validation, `LevelScript` (Lua levels with fallback), `MatchRules` (pure T1-T11 decisions), `Match` (rounds, phases, tries, elimination) |
+| `gameplay/` | core | `Rotor` (the shared rotation), `Playfield` (one station: placements, flights, collision, powerup effects), `Powerups` (ring kinds and constants), `LevelDef` + validation, `LevelScript` (Lua levels and rings with fallback), `MatchRules` (pure T1-T11 decisions), `Match` (rounds, phases, tries, elimination, mend) |
 | `players/` | core | `PlayerManager`: the mode rule and bot fill (stations keep their physical columns) |
-| `bots/` | core | `BotBrain` (sandboxed `bot.lua` per bot), `BotController` (delayed observation, fire presses only) |
+| `bots/` | core | `BotBrain` (sandboxed `bot.lua` per bot), `BotController` (delayed observation, fire presses only); `bot.lua` keeps a reachability map of the angles its aim passes so swinging circles never stall it |
 | `arcade/` | core | `ArcadeMachine` (attract, insert coin, join, playing, game over), `Credits`, `Bookkeeping` |
 | `input/` | core: `Keybinds`; platform: `DeviceRegistry`, `InputSystem` | keyboards, gamepads and raw joysticks, hotplug, assignment, bindings, timestamped actions |
 | `audio/` | core: `Wav`, `SoundId`; platform: `AudioSystem` | WAV parsing; a fixed 16-voice mixer on one SDL audio stream |
@@ -43,7 +43,8 @@ fixed 240 Hz tick ────────────────────�
    │                                 └─ Match.tick(fire presses per station)
    │                                       ├─ BotController.think (before the tick, delayed view)
    │                                       ├─ Rotor.advance  (once)
-   │                                       ├─ Playfield.step x alive stations (shared rotor motion)
+   │                                       ├─ Playfield.step x alive stations (shared rotor motion,
+   │                                       │    powerup rings taken -> shield / skip / slim, mend -> tries)
    │                                       └─ MatchRules when every station is done
    └─ events ──> AudioSystem.play, bookkeeping.ini (atomic)
 render (vsync or frame cap) ──> Screens / ServiceMenu ──> Renderer2D ──> one SDL_RenderGeometry

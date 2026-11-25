@@ -52,12 +52,13 @@ int levelReport(int rounds, unsigned seed) {
         std::fprintf(stderr, "level script: %s\n", err.c_str());
         return 1;
     }
-    const LevelLimits limits = defaultLimits();
-    std::printf("round,valid,launch,prepins,segments,max_speed_deg,reversals,packing,problem\n");
+    LevelLimits limits = defaultLimits();
+    limits.powerups.assign(kAllPowerups.begin(), kAllPowerups.end());
+    std::printf("round,valid,launch,prepins,segments,max_speed_deg,reversals,packing,pickups,problem\n");
     for (int r = 1; r <= rounds; ++r) {
         auto def = LevelScript::generate(*sandbox, r, seed, limits, &err);
         if (!def) {
-            std::printf("%d,0,0,0,0,0,0,0,%s\n", r, err.c_str());
+            std::printf("%d,0,0,0,0,0,0,0,0,%s\n", r, err.c_str());
             continue;
         }
         double fastest = std::fabs(def->rotation.initialSpeed);
@@ -69,8 +70,9 @@ int levelReport(int rounds, unsigned seed) {
             if (seg.targetSpeed != 0.0) prev = seg.targetSpeed;
         }
         const double total = static_cast<double>(def->prepins.size()) + def->launchCount;
-        std::printf("%d,1,%d,%zu,%zu,%.1f,%d,%.3f,\n", r, def->launchCount, def->prepins.size(), def->rotation.segments.size(),
-                    fastest * 180.0 / spindle::gameplay::geom::kPi, reversals, total * limits.minSeparation / spindle::gameplay::geom::kTwoPi);
+        std::printf("%d,1,%d,%zu,%zu,%.1f,%d,%.3f,%zu,\n", r, def->launchCount, def->prepins.size(), def->rotation.segments.size(),
+                    fastest * 180.0 / spindle::gameplay::geom::kPi, reversals, total * limits.minSeparation / spindle::gameplay::geom::kTwoPi,
+                    def->pickups.size());
     }
     return 0;
 }

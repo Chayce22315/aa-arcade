@@ -58,6 +58,8 @@ struct Settings {
         double readyDelay = 1.5;
         int startRound = 1;
         std::uint32_t seed = 0;
+        bool powerups = true;
+        std::string powerupTypes = "shield, skip, slim, mend";
         bool operator==(const Gameplay&) const = default;
     } gameplay;
 

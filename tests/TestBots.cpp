@@ -43,7 +43,7 @@ BotMatchResult playBots(const std::array<config::Difficulty, 4>& diff, std::uint
             for (int s = 0; s < seats; ++s)
                 if (bots[static_cast<std::size_t>(s)] && m.stationInRound(s))
                     fire[static_cast<std::size_t>(s)] =
-                        bots[static_cast<std::size_t>(s)]->think(m.rotor().state(), m.field(s), m.roundTime(), m.tickCount() + 1);
+                        bots[static_cast<std::size_t>(s)]->think(m.rotor().state(), m.field(s), m.roundTime(), m.roundTimeLeft(), m.tickCount() + 1);
         m.tick(fire);
         for (const auto& e : m.takeEvents())
             if (e.type == gameplay::MatchEventType::RoundStarted)
@@ -99,4 +99,68 @@ TEST_CASE(bots_broken_script_is_rejected_or_disabled) {
     bots::BotView v;
     for (int i = 0; i < 25; ++i) CHECK(!brain->decide(v));
     CHECK(brain->disabled());
+}
+
+namespace {
+
+struct StallReport {
+    int timeouts = 0;
+    int rounds = 0;
+    int claimed = 0;
+};
+
+// Four bots of one difficulty play rounds [startRound, startRound + rounds) with plenty of tries.
+StallReport playRounds(config::Difficulty d, int startRound, int rounds, std::uint32_t seed, bool powerups) {
+    gameplay::LevelScript levels;
+    gameplay::MatchConfig c;
+    c.seed = seed * 7919u;
+    c.tries = 9;
+    c.startRound = startRound;
+    if (powerups) c.powerups.assign(gameplay::kAllPowerups.begin(), gameplay::kAllPowerups.end());
+    std::vector<gameplay::ParticipantSpec> specs;
+    std::array<std::unique_ptr<bots::BotController>, 4> bots;
+    for (int s = 0; s < 4; ++s) {
+        specs.push_back({s, gameplay::ParticipantKind::Bot});
+        bots[static_cast<std::size_t>(s)] = makeBot(d, seed * 31u + static_cast<std::uint32_t>(s));
+    }
+    gameplay::Match m(c, specs, levels);
+    StallReport r;
+    while (!m.over() && m.round() < startRound + rounds) {
+        std::array<int, 4> fire{};
+        if (m.phase() == gameplay::MatchPhase::Playing)
+            for (int s = 0; s < 4; ++s)
+                if (m.stationInRound(s))
+                    fire[static_cast<std::size_t>(s)] = bots[static_cast<std::size_t>(s)]->think(
+                        m.rotor().state(), m.field(s), m.roundTime(), m.roundTimeLeft(), m.tickCount() + 1);
+        m.tick(fire);
+        for (const auto& e : m.takeEvents()) {
+            if (e.type == gameplay::MatchEventType::RoundStarted)
+                for (auto& b : bots) b->beginRound();
+            if (e.type == gameplay::MatchEventType::StationFailed && e.value == 1) ++r.timeouts;
+            if (e.type == gameplay::MatchEventType::RoundStarted) ++r.rounds;
+            if (e.type == gameplay::MatchEventType::PowerupClaimed) ++r.claimed;
+        }
+    }
+    return r;
+}
+
+} // namespace
+
+// Regression: on swinging rounds (8-12) the circle reverses before the biggest gap ever reaches the
+// launcher. Bots used to wait for that gap until the round timer ran out; these seeds stalled before.
+TEST_CASE(bots_never_stall_on_swinging_rounds) {
+    using D = config::Difficulty;
+    for (D d : {D::Easy, D::Normal, D::Hard, D::Expert}) {
+        for (std::uint32_t seed = 1; seed <= 6; ++seed) {
+            const StallReport r = playRounds(d, 8, 5, seed, false);
+            if (r.timeouts != 0)
+                test::fail(__FILE__, __LINE__, std::format("{} seed {}: {} station(s) timed out", config::difficultyName(d), seed, r.timeouts));
+        }
+    }
+}
+
+TEST_CASE(bots_take_powerup_rings) {
+    int claimed = 0;
+    for (std::uint32_t seed = 1; seed <= 3; ++seed) claimed += playRounds(config::Difficulty::Expert, 3, 6, seed, true).claimed;
+    CHECK(claimed >= 3);
 }

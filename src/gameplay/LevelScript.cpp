@@ -87,6 +87,15 @@ std::optional<LevelDef> LevelScript::generate(scripting::LuaSandbox& sandbox, in
     lua_setfield(L, -2, "max_speed_deg");
     lua_pushinteger(L, limits.maxSegments);
     lua_setfield(L, -2, "max_segments");
+    lua_pushinteger(L, limits.maxPickups);
+    lua_setfield(L, -2, "max_pickups");
+    lua_createtable(L, static_cast<int>(limits.powerups.size()), 0);
+    for (std::size_t i = 0; i < limits.powerups.size(); ++i) {
+        const std::string name(powerupName(limits.powerups[i]));
+        lua_pushlstring(L, name.data(), name.size());
+        lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+    }
+    lua_setfield(L, -2, "powerups");
 
     if (!sandbox.call(2, 1, error)) {
         lua_settop(L, top);
@@ -144,6 +153,27 @@ std::optional<LevelDef> LevelScript::generate(scripting::LuaSandbox& sandbox, in
         def.rotation.segments.push_back(s);
         lua_pop(L, 1);
     }
+    lua_pop(L, 2); // segments, rotation
+
+    lua_getfield(L, t, "pickups");
+    if (!lua_isnil(L, -1)) {
+        if (!lua_istable(L, -1)) return fail("pickups must be a list of { angle = degrees, kind = name }");
+        const auto n = static_cast<long long>(lua_rawlen(L, -1));
+        if (n > limits.maxPickups) return fail(std::format("more than {} pickups", limits.maxPickups));
+        for (long long i = 1; i <= n; ++i) {
+            lua_rawgeti(L, -1, static_cast<lua_Integer>(i));
+            if (!lua_istable(L, -1)) return fail(std::format("pickups[{}] is not a table", i));
+            const int pk = lua_gettop(L);
+            auto angle = numberField(L, pk, "angle");
+            lua_getfield(L, pk, "kind");
+            const char* kindName = lua_isstring(L, -1) ? lua_tostring(L, -1) : nullptr;
+            const auto kind = kindName ? parsePowerup(kindName) : std::nullopt;
+            lua_pop(L, 2);
+            if (!angle || !std::isfinite(*angle)) return fail(std::format("pickups[{}] needs a finite angle", i));
+            if (!kind) return fail(std::format("pickups[{}] has an unknown kind", i));
+            def.pickups.push_back({*angle * kDegToRad, *kind});
+        }
+    }
     lua_settop(L, top);
 
     if (auto problem = validateLevel(def, limits)) {
@@ -169,14 +199,16 @@ LevelScript::LevelScript(std::optional<ScriptSource> override) : limits_(default
 
 LevelScript::~LevelScript() = default;
 
-LevelDef LevelScript::level(int round, std::uint32_t seed) {
+LevelDef LevelScript::level(int round, std::uint32_t seed, const std::vector<PowerupKind>& powerups) {
+    LevelLimits limits = limits_;
+    limits.powerups = powerups;
     std::string err;
     if (override_) {
-        if (auto def = generate(*override_, round, seed, limits_, &err)) return *def;
+        if (auto def = generate(*override_, round, seed, limits, &err)) return *def;
         log::warn("levels: {} round {} rejected ({}); using the embedded script for this round", overrideOrigin_, round, err);
     }
     if (embedded_) {
-        if (auto def = generate(*embedded_, round, seed, limits_, &err)) return *def;
+        if (auto def = generate(*embedded_, round, seed, limits, &err)) return *def;
         log::error("levels: embedded script round {} rejected: {}", round, err);
     }
     return emergencyLevel(round);

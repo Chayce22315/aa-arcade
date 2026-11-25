@@ -51,8 +51,11 @@ bool Match::stationInRound(int station) const {
 }
 
 void Match::prepareRound() {
-    level_ = levels_.level(round_, config_.seed);
+    // Powerup rings in normal rounds only: sudden death is decided by skill alone.
+    static const std::vector<PowerupKind> kNone;
+    level_ = levels_.level(round_, config_.seed, suddenDeath_ ? kNone : config_.powerups);
     level_.round = round_;
+    std::erase_if(level_.pickups, [&](const Pickup& p) { return suddenDeath_ || !contains(config_.powerups, p.kind); });
     rotor_ = Rotor(scaled(level_.rotation, config_.rotationScale));
     for (int s = 0; s < kMaxStations; ++s) {
         auto& p = participants_[static_cast<std::size_t>(s)];
@@ -120,6 +123,15 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
         const int placedBefore = f.placed();
         f.step(tick_, geom::kTickSeconds, before, delta);
         for (int k = placedBefore; k < f.placed(); ++k) emit(MatchEventType::NeedlePlaced, s);
+        for (PowerupKind kind : f.takeClaims()) {
+            ++p->powerupsClaimed;
+            emit(MatchEventType::PowerupClaimed, s, static_cast<int>(kind));
+            if (kind == PowerupKind::Mend && !suddenDeath_ && p->tries < config_.tries) {
+                ++p->tries;
+                emit(MatchEventType::TryGained, s, p->tries);
+            }
+        }
+        for (int k = f.takeShieldBreaks(); k > 0; --k) emit(MatchEventType::ShieldBroke, s);
         if (f.status() == FieldStatus::Cleared) emit(MatchEventType::StationCleared, s);
         if (f.status() == FieldStatus::Failed) emit(MatchEventType::StationFailed, s, 0);
         if (f.status() == FieldStatus::Playing) anyPlaying = true;

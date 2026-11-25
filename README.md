@@ -17,6 +17,9 @@ aa2 or any other title.
   No desktop main menu, no player pause menu, no quit item.
 - **Four stations** in fixed screen columns. One human is singleplayer, two or more is multiplayer, and
   bots (Lua, sandboxed, same rules as humans) can fill free stations in either mode.
+- **Powerups**: rings on the circle (shield, skip, slim, mend) that you take by landing a needle on
+  them. Same rings for everyone, effects only for whoever takes them, none in sudden death
+  ([docs/RULES.md](docs/RULES.md#powerups)).
 - **Input**: built-in, USB and Bluetooth keyboards (optionally one keyboard per station), Xbox,
   PlayStation and generic controllers through SDL3, unmapped joysticks as a fallback, hotplug,
   automatic or fixed assignment, and pause-and-reconnect on disconnect.

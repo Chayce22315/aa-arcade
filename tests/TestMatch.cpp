@@ -18,7 +18,7 @@ namespace {
 class FixedLevels final : public LevelProvider {
 public:
     explicit FixedLevels(int launch = 5, double speed = 2.0) : launch_(launch), speed_(speed) {}
-    LevelDef level(int round, std::uint32_t) override {
+    LevelDef level(int round, std::uint32_t, const std::vector<PowerupKind>&) override {
         LevelDef d;
         d.round = round;
         d.launchCount = launch_;

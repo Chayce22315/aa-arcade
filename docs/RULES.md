@@ -74,6 +74,28 @@ three consecutive completely tied sudden-death rounds the match is settled by ma
 Real play never reaches it: a tie needs identical failure ticks and identical needle counts three
 times in a row.
 
+## Powerups
+
+From round 3, small rings sit on the circle: they are part of the round definition, so every
+station gets the same rings in the same places, and they turn with the shared rotation. A needle
+that lands on a ring (within three quarters of the minimum needle gap of its centre) takes its
+power. Every effect applies to the station that took it, never to the others, so the shared rotation
+and the identical round conditions are untouched.
+
+| Ring | Mark | Effect |
+|---|---|---|
+| shield | ring in a ring | armed for the rest of the round: the next touch bounces off instead of failing; that needle goes back to the queue and must still be placed. A halo around the core shows it is armed. |
+| skip | dash | one needle fewer to place this round (can clear the round on the spot) |
+| slim | dot | this station's balls shrink to 70% for the rest of the round, so tighter gaps are legal |
+| mend | plus | gives back one lost try, never above the starting tries; at full tries it does nothing |
+
+- Rounds 3-8 have one ring, 9-15 two, 16 on three (fewer when the circle is too crowded to place
+  them clear of the pre-placed needles). At most one ring per round is a mend.
+- Rings never appear in sudden death: tie-breaks are decided by skill alone.
+- Operators switch powerups on or off and choose the ring types (`[Gameplay] powerups`,
+  `powerup_types`, or the service menu's game settings).
+- Bots take rings by the same rule: they only get a ring by landing a needle on it.
+
 ## Standings
 
 The game-over screen ranks players: winner first, then by the round they were eliminated in (later is

@@ -1,5 +1,6 @@
 #include "engine/SelfTest.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <fstream>
@@ -176,9 +177,14 @@ bool SelfTest::oracleWantsFire(int s) const {
     const auto& r = m->rotor().state();
     const double look = flight + kDt;
     const double land = collision::wrapAngle(geom::kAttachAngle - (r.angle + r.speed * look + 0.5 * r.accel * look * look));
-    for (double a : f.attachedAngles())
-        if (collision::angularDistance(land, a) < 2.5 * cfg.minSeparation) return false;
-    return true;
+    double clearance = geom::kPi;
+    for (double a : f.attachedAngles()) clearance = std::min(clearance, collision::angularDistance(land, a));
+    // A careful player goes for a powerup ring passing the launcher when the landing is safe.
+    for (const auto& ring : f.pickups())
+        if (!ring.claimed && collision::angularDistance(land, ring.pickup.angle) < f.claimAngle() * 0.5 &&
+            clearance >= 1.3 * f.minSeparation())
+            return true;
+    return clearance >= 2.5 * f.minSeparation();
 }
 
 void SelfTest::drive(const std::array<Policy, 4>& policy) {
@@ -359,6 +365,17 @@ void SelfTest::build() {
         const auto* d = app_.inputSystem().devices().controllerForStation(1);
         return !A().pausedForDisconnect() && d && d->id == ctl_[1].id;
     });
+    waitFor("round 4: powerup rings on the circles", [this, A, M] {
+        const gameplay::Match* m = M();
+        if (A().state() != ArcadeState::Playing || !m) return true;
+        const int r = m->round();
+        drive({P::Spam, r >= 2 ? P::Spam : P::Oracle, r >= 3 ? P::Spam : P::Oracle, P::Oracle});
+        if (r != 4 || m->phase() != gameplay::MatchPhase::Playing || m->roundTime() < 0.6) return false;
+        for (int s = 0; s < 4; ++s)
+            if (m->stationInRound(s) && !m->field(s).pickups().empty()) return true;
+        return false;
+    }, 120);
+    shot("15_powerup_rings");
     waitFor("match: P1, P2, P3 run out of tries in turn; P4 plays on", [this, A, M] {
         const gameplay::Match* m = M();
         if (A().state() != ArcadeState::Playing || !m) return A().state() == ArcadeState::GameOver;
@@ -371,9 +388,11 @@ void SelfTest::build() {
         check(res && res->winner == 3, std::format("winner {}", res ? res->winner : -9));
         check(M() && M()->lastDecision().rule == gameplay::RuleCase::T1, "match not decided by T1");
         if (M()) {
-            check(M()->participant(0)->eliminatedRound == 3, std::format("P1 out in round {}", M()->participant(0)->eliminatedRound));
-            check(M()->participant(1)->eliminatedRound == 4, std::format("P2 out in round {}", M()->participant(1)->eliminatedRound));
-            check(M()->participant(2)->eliminatedRound == 5, std::format("P3 out in round {}", M()->participant(2)->eliminatedRound));
+            // Powerups can buy a player a round (mend), so only the order of the eliminations is fixed.
+            const int e1 = M()->participant(0)->eliminatedRound, e2 = M()->participant(1)->eliminatedRound,
+                      e3 = M()->participant(2)->eliminatedRound;
+            check(e1 >= 3 && e2 >= 4 && e3 >= 5, std::format("eliminated in rounds {}, {}, {}", e1, e2, e3));
+            check(M()->participant(3)->powerupsClaimed >= 1, "P4 never took a powerup ring");
         }
         (void)this;
         return true;

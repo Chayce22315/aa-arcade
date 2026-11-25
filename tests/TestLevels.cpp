@@ -29,21 +29,21 @@ TEST_CASE(levels_embedded_script_is_feasible_for_rounds_1_to_500) {
 
 TEST_CASE(levels_same_seed_same_round_identical) {
     LevelScript a, b;
-    LevelDef x = a.level(14, 99);
-    LevelDef y = b.level(14, 99);
+    LevelDef x = a.level(14, 99, {});
+    LevelDef y = b.level(14, 99, {});
     CHECK_EQ(x.launchCount, y.launchCount);
     CHECK_EQ(x.prepins.size(), y.prepins.size());
     for (std::size_t i = 0; i < x.prepins.size() && i < y.prepins.size(); ++i) CHECK_EQ(x.prepins[i], y.prepins[i]);
     CHECK_EQ(x.rotation.segments.size(), y.rotation.segments.size());
-    LevelDef z = a.level(14, 100);
+    LevelDef z = a.level(14, 100, {});
     CHECK(z.prepins != x.prepins || z.rotation.segments.size() != x.rotation.segments.size() ||
           z.rotation.initialSpeed != x.rotation.initialSpeed);
 }
 
 TEST_CASE(levels_difficulty_grows) {
     LevelScript s;
-    LevelDef early = s.level(1, 5);
-    LevelDef late = s.level(30, 5);
+    LevelDef early = s.level(1, 5, {});
+    LevelDef late = s.level(30, 5, {});
     CHECK(late.launchCount > early.launchCount);
     CHECK(late.prepins.size() > early.prepins.size());
 }
@@ -81,11 +81,11 @@ TEST_CASE(levels_validation_rejects_bad_levels) {
 TEST_CASE(levels_broken_override_falls_back_to_embedded) {
     LevelScript bad(ScriptSource{"function level() return { launch = 99 } end", "test:bad.lua"});
     CHECK(bad.usingOverride());
-    LevelDef def = bad.level(3, 1);
+    LevelDef def = bad.level(3, 1, {});
     CHECK(!validateLevel(def, bad.limits()).has_value());
     LevelScript syntax(ScriptSource{"this is not lua", "test:syntax.lua"});
     CHECK(!syntax.usingOverride());
-    CHECK(!validateLevel(syntax.level(3, 1), syntax.limits()).has_value());
+    CHECK(!validateLevel(syntax.level(3, 1, {}), syntax.limits()).has_value());
 }
 
 TEST_CASE(lua_sandbox_has_no_io_and_enforces_budget_and_memory) {

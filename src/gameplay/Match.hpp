@@ -30,6 +30,7 @@ struct Participant {
     std::uint64_t eliminatedTick = 0;
     int roundsCleared = 0;
     int totalPlaced = 0;
+    int powerupsClaimed = 0;
     bool inRound = false; // plays the current (or upcoming) round
 };
 
@@ -42,6 +43,7 @@ struct MatchConfig {
     std::uint32_t seed = 1;
     double rotationScale = 1.0;
     double needleScale = 1.0;
+    std::vector<PowerupKind> powerups; // ring kinds rounds may contain; empty = powerups off
 };
 
 enum class MatchPhase { Ready, Playing, Resolving, Over };
@@ -57,7 +59,10 @@ enum class MatchEventType {
     Eliminated,     // station
     SuddenDeath,    // value = number of players in it
     Winner,         // station
-    NoWinner
+    NoWinner,
+    PowerupClaimed, // station, value = PowerupKind
+    TryGained,      // station, value = tries now (mend)
+    ShieldBroke     // station
 };
 
 struct MatchEvent {

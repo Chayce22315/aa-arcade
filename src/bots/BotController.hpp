@@ -18,7 +18,8 @@ public:
 
     void beginRound();
     // Call once per Playing tick, before the match tick. Returns the number of fire presses (0 or 1).
-    int think(const gameplay::RotorState& rotor, const gameplay::Playfield& field, double roundTime, std::uint64_t tick);
+    int think(const gameplay::RotorState& rotor, const gameplay::Playfield& field, double roundTime, double timeLeft,
+              std::uint64_t tick);
 
     const BotBrain& brain() const { return *brain_; }
     int delayTicks() const { return delayTicks_; }
@@ -38,6 +39,7 @@ private:
     std::vector<Snapshot> history_; // ring buffer of delayTicks_ + 1 entries
     std::size_t head_ = 0;
     std::size_t filled_ = 0;
+    std::vector<double> pickupScratch_;
 };
 
 } // namespace spindle::bots

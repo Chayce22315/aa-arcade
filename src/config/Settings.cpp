@@ -7,6 +7,7 @@
 
 #include "assets/ControllerDbPin.hpp"
 #include "engine/Branding.hpp"
+#include "gameplay/Powerups.hpp"
 
 namespace spindle::config {
 namespace {
@@ -108,6 +109,8 @@ void visitAll(Settings& s, V& v) {
     v.real("ready_delay", s.gameplay.readyDelay, 0.5, 5.0, "seconds between rounds before every survivor starts together");
     v.integer("start_round", s.gameplay.startRound, 1, 50, "round number a match starts at");
     v.seed("seed", s.gameplay.seed, "0 = new random levels each match; any other number repeats the same levels");
+    v.boolean("powerups", s.gameplay.powerups, "1 = powerup rings appear on the circles from round 3 (never in sudden death)");
+    v.powerupList("powerup_types", s.gameplay.powerupTypes, "which rings may appear: shield, skip, slim, mend (comma list, or none)");
 
     v.section("Bots", "Computer players follow exactly the same rules as humans.");
     v.integer("singleplayer_bots", s.bots.singleplayerBots, 0, 3, "bots joining a game with exactly one human");
@@ -220,6 +223,14 @@ public:
         if (!v) return invalid(key, *raw, "expected auto or WIDTHxHEIGHT (640x360 .. 16384x16384)");
         ref = *v;
     }
+    void powerupList(std::string_view key, std::string& ref, std::string_view) {
+        auto raw = fetch(key);
+        if (!raw) return;
+        std::vector<std::string> unknown;
+        const auto kinds = gameplay::parsePowerupList(*raw, &unknown);
+        if (!unknown.empty()) return invalid(key, *raw, "unknown powerup '" + unknown.front() + "' (valid: shield, skip, slim, mend, none)");
+        ref = gameplay::formatPowerupList(kinds);
+    }
     void seed(std::string_view key, std::uint32_t& ref, std::string_view) {
         auto raw = fetch(key);
         if (!raw) return;
@@ -274,6 +285,7 @@ public:
     void text(std::string_view key, std::string& ref, bool, std::string_view c) { add(key, ref, std::string(c)); }
     void resolution(std::string_view key, Resolution& ref, std::string_view c) { add(key, formatResolution(ref), std::string(c)); }
     void seed(std::string_view key, std::uint32_t& ref, std::string_view c) { add(key, std::to_string(ref), std::string(c)); }
+    void powerupList(std::string_view key, std::string& ref, std::string_view c) { add(key, ref, std::string(c)); }
 
 private:
     static std::string withInfo(std::string_view comment, std::string_view range) {

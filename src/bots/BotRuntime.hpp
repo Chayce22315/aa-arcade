@@ -24,10 +24,13 @@ struct BotView {
     int needlesLeft = 0;
     int inFlight = 0;
     double flightTime = 0.0;    // seconds from launch to attachment
-    double minSeparation = 0.0; // radians
+    double minSeparation = 0.0; // radians (effective: slim makes it smaller)
     double attachAngle = 0.0;   // radians
     bool fireReady = false;     // the fire interval has elapsed (current, the bot's own button)
+    std::span<const double> pickups; // relative angles of powerup rings not yet taken
+    double claimAngle = 0.0;    // a needle within this angle of a ring's centre takes it
     double roundTime = 0.0;
+    double timeLeft = 0.0;      // seconds until the round timer runs out (shown on screen)
     double delay = 0.0;         // seconds of delay applied to this view
     double dt = 0.0;
 };
@@ -63,8 +66,10 @@ private:
     int profileRef_ = -1;
     int obsRef_ = -1;
     int attachedRef_ = -1;
+    int pickupsRef_ = -1;
     int memRef_ = -1;
     int lastAttachedLen_ = 0;
+    int lastPickupsLen_ = 0;
     int errors_ = 0;
     bool disabled_ = false;
 };

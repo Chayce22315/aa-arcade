@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 
 #include "Test.hpp"
@@ -44,4 +45,22 @@ TEST_CASE(layout_four_columns_and_scale) {
     CHECK(tall.area.y > 0.0f); // letterboxed
     ScreenLayout zero = computeLayout(0, 0);
     CHECK(zero.scale > 0.0f);
+}
+
+TEST_CASE(font_nine_is_upright_and_six_is_nine_turned_round) {
+    const Glyph& nine = glyph('9');
+    const Glyph& six = glyph('6');
+    REQUIRE(nine.strokes.size() == six.strokes.size());
+    for (std::size_t s = 0; s < nine.strokes.size(); ++s) {
+        REQUIRE(nine.strokes[s].size() == six.strokes[s].size());
+        for (std::size_t i = 0; i < nine.strokes[s].size(); ++i) {
+            CHECK_NEAR(six.strokes[s][i].x, 4.0f - nine.strokes[s][i].x, 1e-4);
+            CHECK_NEAR(six.strokes[s][i].y, 6.0f - nine.strokes[s][i].y, 1e-4);
+        }
+    }
+    // The 9's closed bowl is on top and its stem reaches the baseline on the right.
+    float bowlMaxY = 0.0f;
+    for (const Vec2& p : nine.strokes[0]) bowlMaxY = std::max(bowlMaxY, p.y);
+    CHECK(bowlMaxY < 4.0f);
+    CHECK_NEAR(nine.strokes[1].front().x, 4.0f, 1e-4);
 }

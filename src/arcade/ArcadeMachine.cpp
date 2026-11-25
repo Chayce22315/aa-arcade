@@ -129,6 +129,7 @@ gameplay::MatchConfig ArcadeMachine::matchConfig(bool demo) {
     c.seed = settings_.gameplay.seed != 0 ? settings_.gameplay.seed : (rng_.next() | 1u);
     c.rotationScale = settings_.gameplay.rotationSpeedScale;
     c.needleScale = settings_.gameplay.needleSpeedScale;
+    if (settings_.gameplay.powerups) c.powerups = gameplay::parsePowerupList(settings_.gameplay.powerupTypes);
     return c;
 }
 
@@ -239,7 +240,8 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
             const auto i = static_cast<std::size_t>(s);
             if (!demo && lineup_.seats[i] == players::SeatKind::Human) fire[i] = input.stations[i].firePresses;
             if (bots_[i] && match_->stationInRound(s))
-                fire[i] += bots_[i]->think(match_->rotor().state(), match_->field(s), match_->roundTime(), match_->tickCount() + 1);
+                fire[i] += bots_[i]->think(match_->rotor().state(), match_->field(s), match_->roundTime(), match_->roundTimeLeft(),
+                                           match_->tickCount() + 1);
         }
     }
     match_->tick(fire);
@@ -256,6 +258,8 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
         case gameplay::MatchEventType::StationCleared: sound(audio::SoundId::Clear, demo); break;
         case gameplay::MatchEventType::Winner: sound(audio::SoundId::Winner, demo); break;
         case gameplay::MatchEventType::NoWinner: sound(audio::SoundId::Fail, demo); break;
+        case gameplay::MatchEventType::PowerupClaimed: sound(audio::SoundId::Powerup, demo); break;
+        case gameplay::MatchEventType::ShieldBroke: sound(audio::SoundId::Shield, demo); break;
         default: break;
         }
     }

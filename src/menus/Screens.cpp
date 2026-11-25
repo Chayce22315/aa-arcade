@@ -62,14 +62,39 @@ struct StationLook {
     bool dim = false;
 };
 
-void drawBall(const ScreenContext& c, Vec2 p, int number, Color fg, bool showNumber) {
-    const float r = px(c, static_cast<float>(geom::kBallRadius));
+void drawBall(const ScreenContext& c, Vec2 p, float radius, int number, Color fg, bool showNumber) {
+    const float r = px(c, radius);
     c.r.fillCircle(p, r, fg);
     if (showNumber && number > 0) {
         const std::string n = std::to_string(number);
-        const float cap = px(c, n.size() > 1 ? 9.5f : 11.0f);
+        const float cap = px(c, (n.size() > 1 ? 9.5f : 11.0f) * radius / static_cast<float>(geom::kBallRadius));
         c.r.text(n, {p.x, p.y - cap * 0.5f}, cap, colors::kBlack, Align::Center, std::max(1.0f, cap * 0.16f));
     }
+}
+
+// A powerup ring: an outline with the power's mark inside (all lines, no images).
+void drawPowerupIcon(render::Renderer2D& r, gameplay::PowerupKind kind, Vec2 c, float radius, Color col) {
+    const float t = std::max(1.2f, radius * 0.17f);
+    r.ring(c, radius, t, col);
+    switch (kind) {
+    case gameplay::PowerupKind::Shield: r.ring(c, radius * 0.48f, t, col); break;
+    case gameplay::PowerupKind::Skip: r.line({c.x - radius * 0.5f, c.y}, {c.x + radius * 0.5f, c.y}, t, col); break;
+    case gameplay::PowerupKind::Slim: r.fillCircle(c, radius * 0.28f, col); break;
+    case gameplay::PowerupKind::Mend:
+        r.line({c.x - radius * 0.5f, c.y}, {c.x + radius * 0.5f, c.y}, t, col);
+        r.line({c.x, c.y - radius * 0.5f}, {c.x, c.y + radius * 0.5f}, t, col);
+        break;
+    }
+}
+
+const char* powerupLabel(gameplay::PowerupKind kind) {
+    switch (kind) {
+    case gameplay::PowerupKind::Shield: return "shield";
+    case gameplay::PowerupKind::Skip: return "skip";
+    case gameplay::PowerupKind::Slim: return "slim";
+    case gameplay::PowerupKind::Mend: return "mend";
+    }
+    return "";
 }
 
 void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const StationLook& look) {
@@ -83,20 +108,31 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
     const float needle = px(c, 2.2f);
     const float L = static_cast<float>(f.config().needleLength > 0 ? f.config().needleLength : geom::kNeedleLength);
 
+    const float ball = static_cast<float>(f.ballRadius() > 0.0 ? f.ballRadius() : geom::kBallRadius);
+    const auto onCircle = [&](double rel) {
+        const double a = rel + angle;
+        return Vec2{centre.x + px(c, L) * static_cast<float>(std::cos(a)), centre.y + px(c, L) * static_cast<float>(std::sin(a))};
+    };
+
+    // Powerup rings still to be taken, turning with the circle.
+    for (const auto& ring : f.pickups())
+        if (!ring.claimed)
+            drawPowerupIcon(c.r, ring.pickup.kind, onCircle(ring.pickup.angle), px(c, static_cast<float>(geom::kBallRadius) * 1.05f),
+                            fg.withAlpha(0.9f));
+
     const auto& attached = f.attached();
     for (std::size_t i = 0; i < attached.size(); ++i) {
-        const double a = attached[i].angle + angle;
-        const Vec2 p{centre.x + px(c, L) * static_cast<float>(std::cos(a)), centre.y + px(c, L) * static_cast<float>(std::sin(a))};
+        const Vec2 p = onCircle(attached[i].angle);
         const bool hit = f.status() == gameplay::FieldStatus::Failed && f.conflictAttached() && *f.conflictAttached() == i;
         const Color col = hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fg;
         c.r.line(centre, p, needle, col);
-        drawBall(c, p, 0, col, false);
+        drawBall(c, p, ball, 0, col, false);
     }
     for (std::size_t i = 0; i < f.flying().size(); ++i) {
         const auto& fl = f.flying()[i];
         const Vec2 p{centre.x, centre.y + px(c, static_cast<float>(fl.distance))};
         const bool hit = f.status() == gameplay::FieldStatus::Failed && f.conflictFlying() && *f.conflictFlying() == i;
-        drawBall(c, p, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fg, true);
+        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fg, true);
     }
     // Waiting needles: the next one sits at the launcher, the rest queue below it.
     const int left = f.needlesLeft();
@@ -104,10 +140,21 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
     for (int k = 0; k < shown; ++k) {
         const float y = static_cast<float>(geom::kLaunchDistance + geom::kQueueSpacing * k);
         const Color col = k == 0 ? fg : fg.withAlpha(std::max(0.25f, 1.0f - 0.07f * static_cast<float>(k)));
-        drawBall(c, {centre.x, centre.y + px(c, y)}, left - k, col, true);
+        drawBall(c, {centre.x, centre.y + px(c, y)}, ball, left - k, col, true);
+    }
+    // Shield: a halo around the core while armed, a burst when it saves a needle.
+    const float core = px(c, static_cast<float>(geom::kCoreRadius));
+    if (f.shieldArmed()) c.r.ring(centre, core + px(c, 9), px(c, 2.2f), fg);
+    const std::uint64_t now = m.tickCount();
+    if (f.shieldBreakTick() > 0 && now >= f.shieldBreakTick()) {
+        const double since = static_cast<double>(now - f.shieldBreakTick()) * geom::kTickSeconds;
+        if (since < 0.45) {
+            const float k = static_cast<float>(since / 0.45);
+            c.r.ring(centre, core + px(c, 9.0f + 40.0f * k), px(c, 2.2f), fg.withAlpha(1.0f - k));
+        }
     }
     // Core with the round number.
-    c.r.fillCircle(centre, px(c, static_cast<float>(geom::kCoreRadius)), fg);
+    c.r.fillCircle(centre, core, fg);
     const std::string round = std::to_string(m.round());
     const float cap = px(c, round.size() > 2 ? 22.0f : 28.0f);
     c.r.text(round, {centre.x, centre.y - cap * 0.5f}, cap, colors::kBlack, Align::Center, cap * 0.12f);
@@ -185,6 +232,9 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
             drawStationStatus(c, s, f.failReason() == gameplay::FailReason::Timeout ? "time" : "miss", Color{1.0f, 0.45f, 0.45f, 1.0f});
         } else if (m.phase() == gameplay::MatchPhase::Ready) {
             drawStationStatus(c, s, "ready", colors::kDim, 24);
+        } else if (f.lastClaim() && now >= f.lastClaimTick() &&
+                   static_cast<double>(now - f.lastClaimTick()) * geom::kTickSeconds < 0.9) {
+            drawStationStatus(c, s, powerupLabel(*f.lastClaim()), colors::kWhite, 26);
         }
         if (m.phase() == gameplay::MatchPhase::Playing && f.status() == gameplay::FieldStatus::Playing) {
             const double left = m.roundTimeLeft();
@@ -236,15 +286,33 @@ void drawHowTo(const ScreenContext& c) {
         "out of tries means out of the match",
         "the last player standing wins",
     };
-    float y = 240;
+    float y = 210;
     for (const char* l : lines) {
         textAt(c, l, cx, areaY(c, y), 22, colors::kWhite);
-        y += 62;
+        y += 54;
+    }
+    // Powerup legend (only the rings the operator enabled).
+    const auto& gp = c.arcade.settings().gameplay;
+    const auto kinds = gp.powerups ? gameplay::parsePowerupList(gp.powerupTypes) : std::vector<gameplay::PowerupKind>{};
+    if (!kinds.empty()) {
+        textAt(c, "land a needle on a ring to take its power", cx, areaY(c, 610), 20, colors::kWhite);
+        const float spacing = 230.0f;
+        float x = cx - px(c, spacing) * 0.5f * static_cast<float>(kinds.size() - 1);
+        for (gameplay::PowerupKind k : kinds) {
+            const char* what = k == gameplay::PowerupKind::Shield ? "one touch bounces off"
+                               : k == gameplay::PowerupKind::Skip ? "one needle fewer"
+                               : k == gameplay::PowerupKind::Slim ? "thinner needles"
+                                                                  : "one try back";
+            drawPowerupIcon(c.r, k, {x, areaY(c, 682)}, px(c, 15), colors::kWhite);
+            textAt(c, powerupLabel(k), x, areaY(c, 712), 17, colors::kWhite);
+            textAt(c, what, x, areaY(c, 740), 13, colors::kDim);
+            x += px(c, spacing);
+        }
     }
     // A small animated example: a needle flying into a turning circle.
-    const Vec2 centre{cx, areaY(c, 800)};
+    const Vec2 centre{cx, areaY(c, 860)};
     const double phase = std::fmod(c.time, 2.0);
-    const float scale = 0.55f;
+    const float scale = 0.42f;
     decorativeCircle(c, centre, scale, c.time * 0.6);
     const float dist = static_cast<float>(300.0 - std::min(phase, 1.0) * 150.0) * scale;
     if (phase < 1.0) c.r.fillCircle({centre.x, centre.y + px(c, dist)}, px(c, 11) * scale, colors::kWhite);

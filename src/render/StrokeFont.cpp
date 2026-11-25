@@ -77,6 +77,22 @@ Glyph finish(Builder b) {
     return g;
 }
 
+// The 9: a closed bowl on top, a straight stem down the right side, a short hook to the bottom left.
+Builder nine() {
+    Builder b;
+    b.arc(2, 1.9f, 2, 1.9f, 0, 360);
+    b.poly({{4, 1.9f}, {4, 4.0f}}).arcTo(2, 4.0f, 2, 2.0f, 0, 145);
+    return b;
+}
+
+// The 6 is the 9 turned half a revolution, so the pair always matches.
+Builder six() {
+    Builder b = nine();
+    for (Path& s : b.strokes)
+        for (Vec2& p : s) p = {4.0f - p.x, 6.0f - p.y};
+    return b;
+}
+
 Glyph make(char c) {
     Builder b;
     switch (c) {
@@ -151,10 +167,10 @@ Glyph make(char c) {
     case '3': b.arc(2, 1.5f, 1.8f, 1.5f, 200, 450).arcTo(2, 4.5f, 2, 1.5f, 270, 520); break;
     case '4': b.poly({{3, 6}, {3, 0}, {0, 4.2f}, {4, 4.2f}}); break;
     case '5': b.poly({{3.8f, 0}, {0.5f, 0}, {0.3f, 2.7f}}).arcTo(2, 4.1f, 2, 1.9f, 230, 520); break;
-    case '6': b.arc(2, 3, 2, 3, 300, 160).arc(2, 4.2f, 2, 1.8f, 0, 360); break;
+    case '6': b = six(); break;
     case '7': b.poly({{0, 0}, {4, 0}, {1.4f, 6}}); break;
     case '8': b.arc(2, 1.45f, 1.7f, 1.45f, 0, 360).arc(2, 4.4f, 2, 1.6f, 0, 360); break;
-    case '9': b.arc(2, 1.8f, 2, 1.8f, 0, 360).arc(2, 3, 2, 3, 350, 120); break;
+    case '9': b = nine(); break;
     // ---------------------------------------------------------------- punctuation
     case ' ': break;
     case '.': b.dot(0, 5.9f); break;

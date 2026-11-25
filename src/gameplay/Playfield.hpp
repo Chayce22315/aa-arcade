@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "gameplay/LevelDef.hpp"
+#include "gameplay/Powerups.hpp"
 
 namespace spindle::gameplay {
 
@@ -33,7 +34,12 @@ struct FlyingNeedle {
     int number = 0;        // the countdown number it carried in the queue
 };
 
-// One station's circle: its own needle placements, needles in flight and collision checks.
+struct PickupState {
+    Pickup pickup;
+    bool claimed = false;
+};
+
+// One station's circle: its own needle placements, needles in flight, collision checks and powerups.
 // It never owns rotation; each tick it is handed the shared rotor's motion.
 class Playfield {
 public:
@@ -67,8 +73,26 @@ public:
     std::optional<std::size_t> conflictAttached() const { return conflictAttached_; }
     std::optional<std::size_t> conflictFlying() const { return conflictFlying_; }
 
+    // Powerups. Ball radius and minimum separation are the effective values (slim shrinks them).
+    const std::vector<PickupState>& pickups() const { return pickups_; }
+    double claimAngle() const { return claimAngle_; }
+    double ballRadius() const { return ballRadius_; }
+    double minSeparation() const { return minSeparation_; }
+    bool shieldArmed() const { return shield_; }
+    bool slim() const { return slim_; }
+    std::optional<PowerupKind> lastClaim() const { return lastClaim_; }
+    std::uint64_t lastClaimTick() const { return lastClaimTick_; }
+    std::uint64_t shieldBreakTick() const { return shieldBreakTick_; }
+    int claimedThisRound() const { return claimed_; }
+    // Claims and shield breaks since the last call (the match turns them into events and tries).
+    std::vector<PowerupKind> takeClaims();
+    int takeShieldBreaks();
+
 private:
     void failCollision(std::uint64_t tick, std::size_t attachedIndex, std::size_t flyingIndex);
+    // A touch: returns true if a shield absorbed it (the flying needle is removed and re-queued).
+    bool absorb(std::uint64_t tick, std::size_t flyingIndex);
+    void claimAt(double relAngle, std::uint64_t tick);
 
     FieldConfig config_{};
     FieldStatus status_ = FieldStatus::Idle;
@@ -84,6 +108,19 @@ private:
     std::optional<std::uint64_t> lastFireTick_;
     std::optional<std::size_t> conflictAttached_;
     std::optional<std::size_t> conflictFlying_;
+
+    std::vector<PickupState> pickups_;
+    double claimAngle_ = 0.0;
+    double ballRadius_ = 0.0;
+    double minSeparation_ = 0.0;
+    bool shield_ = false;
+    bool slim_ = false;
+    int claimed_ = 0;
+    std::optional<PowerupKind> lastClaim_;
+    std::uint64_t lastClaimTick_ = 0;
+    std::uint64_t shieldBreakTick_ = 0;
+    std::vector<PowerupKind> newClaims_;
+    int newShieldBreaks_ = 0;
 };
 
 } // namespace spindle::gameplay

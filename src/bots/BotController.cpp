@@ -19,7 +19,7 @@ void BotController::beginRound() {
     brain_->resetMemory();
 }
 
-int BotController::think(const gameplay::RotorState& rotor, const gameplay::Playfield& field, double roundTime,
+int BotController::think(const gameplay::RotorState& rotor, const gameplay::Playfield& field, double roundTime, double timeLeft,
                          std::uint64_t tick) {
     if (field.status() != gameplay::FieldStatus::Playing) return 0;
     Snapshot now;
@@ -51,10 +51,16 @@ int BotController::think(const gameplay::RotorState& rotor, const gameplay::Play
     v.inFlight = seen.inFlight;
     const auto& cfg = field.config();
     v.flightTime = (cfg.launchDistance - cfg.needleLength) / cfg.needleSpeed;
-    v.minSeparation = cfg.minSeparation;
+    v.minSeparation = field.minSeparation();
     v.attachAngle = gameplay::geom::kAttachAngle;
     v.fireReady = field.canFireAt(tick);
+    pickupScratch_.clear();
+    for (const auto& p : field.pickups())
+        if (!p.claimed) pickupScratch_.push_back(p.pickup.angle);
+    v.pickups = pickupScratch_;
+    v.claimAngle = field.claimAngle();
     v.roundTime = roundTime;
+    v.timeLeft = timeLeft;
     v.delay = delay;
     v.dt = gameplay::geom::kTickSeconds;
     return brain_->decide(v) ? 1 : 0;

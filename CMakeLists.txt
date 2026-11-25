@@ -60,7 +60,9 @@ set(SPINDLE_EMBEDDED_FILES
   audio/menu_move.wav
   audio/menu_select.wav
   audio/winner.wav
-  audio/round_start.wav)
+  audio/round_start.wav
+  audio/powerup.wav
+  audio/shield.wav)
 spindle_embed_files(
   OUTPUT ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data
@@ -78,6 +80,7 @@ add_library(spindle_core STATIC
   src/audio/Wav.cpp
   src/collision/Collision.cpp
   src/scripting/LuaSandbox.cpp
+  src/gameplay/Powerups.cpp
   src/gameplay/Rotor.cpp
   src/gameplay/LevelDef.cpp
   src/gameplay/LevelScript.cpp
@@ -142,6 +145,7 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestRotor.cpp
     tests/TestLevels.cpp
     tests/TestPlayfield.cpp
+    tests/TestPowerups.cpp
     tests/TestMatchRules.cpp
     tests/TestMatch.cpp
     tests/TestPlayerManager.cpp

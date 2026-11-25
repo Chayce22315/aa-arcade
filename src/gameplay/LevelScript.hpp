@@ -24,7 +24,7 @@ public:
     explicit LevelScript(std::optional<ScriptSource> override = std::nullopt);
     ~LevelScript() override;
 
-    LevelDef level(int round, std::uint32_t seed) override;
+    LevelDef level(int round, std::uint32_t seed, const std::vector<PowerupKind>& powerups) override;
 
     bool embeddedHealthy() const { return embedded_ != nullptr; }
     bool usingOverride() const { return override_ != nullptr; }
