@@ -1,0 +1,11 @@
+/build/
+/out/
+/.vs/
+/.vscode/
+CMakeUserPresets.json
+*.user
+__pycache__/
+/settings.ini
+/bookkeeping.ini
+/logs/
+/gamecontrollerdb.txt
