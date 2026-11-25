@@ -22,14 +22,19 @@ void BotController::beginRound() {
 int BotController::think(const gameplay::RotorState& rotor, const gameplay::Playfield& field, double roundTime, double timeLeft,
                          std::uint64_t tick) {
     if (field.status() != gameplay::FieldStatus::Playing) return 0;
-    Snapshot now;
+    constexpr double dtTick = gameplay::geom::kTickSeconds;
+    Snapshot& now = history_[head_];
     now.angle = rotor.angle;
     now.speed = rotor.speed;
     now.accel = rotor.accel;
-    now.attachedCount = static_cast<int>(field.attachedAngles().size());
+    now.attached.assign(field.attachedAngles().begin(), field.attachedAngles().end()); // reuses the slot's capacity
+    now.revision = field.revision();
     now.needlesLeft = field.needlesLeft();
     now.inFlight = field.inFlight();
-    history_[head_] = now;
+    now.onFire = field.onFire(tick);
+    now.fireLeft = now.onFire ? static_cast<double>(field.fireUntilTick() - tick) * dtTick : 0.0;
+    now.combo = field.combo();
+    now.chainLeft = static_cast<double>(field.chainTicksLeft(tick)) * dtTick;
     head_ = (head_ + 1) % history_.size();
     filled_ = std::min(filled_ + 1, history_.size());
 
@@ -43,14 +48,19 @@ int BotController::think(const gameplay::RotorState& rotor, const gameplay::Play
     v.angle = seen.angle;
     v.speed = seen.speed;
     v.accel = seen.accel;
-    // Attached needles only accumulate within a round, so the delayed set is a prefix.
-    v.attached = std::span<const double>(field.attachedAngles().data(),
-                                         static_cast<std::size_t>(std::min<int>(seen.attachedCount,
-                                                                                static_cast<int>(field.attachedAngles().size()))));
+    v.attached = seen.attached;
+    v.revision = seen.revision;
     v.needlesLeft = seen.needlesLeft;
     v.inFlight = seen.inFlight;
     const auto& cfg = field.config();
-    v.flightTime = (cfg.launchDistance - cfg.needleLength) / cfg.needleSpeed;
+    v.flightTime = (cfg.launchDistance - cfg.needleLength) / field.needleSpeed(); // swift makes it shorter
+    v.fireEnabled = cfg.fireEnabled;
+    v.onFire = seen.onFire;
+    v.fireLeft = seen.fireLeft;
+    v.combo = seen.combo;
+    v.comboTarget = cfg.fireCombo;
+    v.chainLeft = seen.chainLeft;
+    v.closeCall = gameplay::kCloseCallFactor * field.minSeparation();
     v.minSeparation = field.minSeparation();
     v.attachAngle = gameplay::geom::kAttachAngle;
     v.fireReady = field.canFireAt(tick);
@@ -62,7 +72,7 @@ int BotController::think(const gameplay::RotorState& rotor, const gameplay::Play
     v.roundTime = roundTime;
     v.timeLeft = timeLeft;
     v.delay = delay;
-    v.dt = gameplay::geom::kTickSeconds;
+    v.dt = dtTick;
     return brain_->decide(v) ? 1 : 0;
 }
 

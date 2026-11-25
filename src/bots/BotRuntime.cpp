@@ -152,6 +152,16 @@ bool BotBrain::decide(const BotView& v) {
     lua_setfield(L, obs, "pickups");
     setInteger(L, obs, "pickup_count", np);
     setNumber(L, obs, "claim_angle", v.claimAngle);
+    setInteger(L, obs, "revision", v.revision);
+    lua_pushboolean(L, v.fireEnabled ? 1 : 0);
+    lua_setfield(L, obs, "fire_enabled");
+    lua_pushboolean(L, v.onFire ? 1 : 0);
+    lua_setfield(L, obs, "on_fire");
+    setNumber(L, obs, "fire_left", v.fireLeft);
+    setInteger(L, obs, "combo", v.combo);
+    setInteger(L, obs, "combo_target", v.comboTarget);
+    setNumber(L, obs, "chain_left", v.chainLeft);
+    setNumber(L, obs, "close_call", v.closeCall);
     setNumber(L, obs, "round_time", v.roundTime);
     setNumber(L, obs, "time_left", v.timeLeft);
     setNumber(L, obs, "delay", v.delay);

@@ -363,6 +363,12 @@ void ServiceMenu::build(PageId id) {
             };
             items.push_back(std::move(m));
         }
+        MenuItem fire = boolItem("fire meter", edit_.gameplay.fireMeter);
+        fire.separatorBefore = true;
+        items.push_back(std::move(fire));
+        items.push_back(intItem("  combo to catch fire", edit_.gameplay.fireCombo, 4, 30));
+        items.push_back(realItem("  seconds on fire", edit_.gameplay.fireSeconds, 0.5, 5.0, 0.25));
+        items.push_back(realItem("  combo chain window", edit_.gameplay.fireChainWindow, 0.5, 5.0, 0.25));
         break;
     }
     case PageId::Coin: {

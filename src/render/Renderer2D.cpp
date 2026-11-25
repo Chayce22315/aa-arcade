@@ -15,6 +15,7 @@ constexpr std::size_t kFlushVertices = 60000;
 void Renderer2D::begin(Color clearColor) {
     vertices_.clear();
     indices_.clear();
+    batchTexture_ = nullptr;
     calls_ = 0;
     frameVertices_ = 0;
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -30,7 +31,7 @@ void Renderer2D::end() {
 
 void Renderer2D::flush() {
     if (indices_.empty()) return;
-    SDL_RenderGeometry(renderer_, nullptr, vertices_.data(), static_cast<int>(vertices_.size()), indices_.data(),
+    SDL_RenderGeometry(renderer_, batchTexture_, vertices_.data(), static_cast<int>(vertices_.size()), indices_.data(),
                        static_cast<int>(indices_.size()));
     frameVertices_ += vertices_.size();
     ++calls_;
@@ -38,11 +39,18 @@ void Renderer2D::flush() {
     indices_.clear();
 }
 
-int Renderer2D::vertex(float x, float y, Color c) {
+void Renderer2D::prepare(SDL_Texture* texture) {
+    if (texture != batchTexture_ || vertices_.size() > kFlushVertices) {
+        flush();
+        batchTexture_ = texture;
+    }
+}
+
+int Renderer2D::vertex(float x, float y, Color c, float u, float v0) {
     SDL_Vertex v;
     v.position = {x, y};
     v.color = {c.r, c.g, c.b, c.a};
-    v.tex_coord = {0.0f, 0.0f};
+    v.tex_coord = {u, v0};
     vertices_.push_back(v);
     return static_cast<int>(vertices_.size() - 1);
 }
@@ -65,7 +73,7 @@ const std::vector<Vec2>& Renderer2D::unitCircle(int segments) {
 }
 
 void Renderer2D::fillRect(const Rect& r, Color c) {
-    if (vertices_.size() > kFlushVertices) flush();
+    prepare(nullptr);
     const int a = vertex(r.x, r.y, c), b = vertex(r.x + r.w, r.y, c), d = vertex(r.x + r.w, r.y + r.h, c),
               e = vertex(r.x, r.y + r.h, c);
     tri(a, b, d);
@@ -74,7 +82,7 @@ void Renderer2D::fillRect(const Rect& r, Color c) {
 
 void Renderer2D::fillCircle(Vec2 center, float radius, Color c) {
     if (!(radius > 0.0f) || !std::isfinite(radius)) return;
-    if (vertices_.size() > kFlushVertices) flush();
+    prepare(nullptr);
     const int segments = std::clamp(static_cast<int>(std::ceil(2.0f * std::numbers::pi_v<float> * radius / 2.5f)), 12, 256);
     const auto& unit = unitCircle(segments);
     const float inner = std::max(0.0f, radius - kFeather * 0.5f);
@@ -97,7 +105,7 @@ void Renderer2D::fillCircle(Vec2 center, float radius, Color c) {
 
 void Renderer2D::ring(Vec2 center, float radius, float thickness, Color c) {
     if (!(radius > 0.0f) || !(thickness > 0.0f)) return;
-    if (vertices_.size() > kFlushVertices) flush();
+    prepare(nullptr);
     const int segments = std::clamp(static_cast<int>(std::ceil(2.0f * std::numbers::pi_v<float> * radius / 2.5f)), 16, 256);
     const auto& unit = unitCircle(segments);
     const float alpha = std::min(1.0f, thickness);
@@ -126,7 +134,7 @@ void Renderer2D::line(Vec2 a, Vec2 b, float thickness, Color c) {
     const float dx = b.x - a.x, dy = b.y - a.y;
     const float len = std::sqrt(dx * dx + dy * dy);
     if (!(thickness > 0.0f) || !std::isfinite(len)) return;
-    if (vertices_.size() > kFlushVertices) flush();
+    prepare(nullptr);
     // Direction and normal; a zero-length line becomes a square dot.
     const float ux = len > 1e-6f ? dx / len : 1.0f, uy = len > 1e-6f ? dy / len : 0.0f;
     const float nx = -uy, ny = ux;
@@ -162,6 +170,19 @@ void Renderer2D::polyline(std::span<const Vec2> points, float thickness, Color c
     // Round joins hide the square caps at corners of thick strokes.
     if (thickness > 2.5f)
         for (std::size_t i = 1; i + 1 < points.size(); ++i) fillCircle(points[i], thickness * 0.5f, c);
+}
+
+void Renderer2D::sprite(SDL_Texture* texture, Vec2 center, float w, float h, float angle, Color c, Rect uv) {
+    if (!texture || !(w > 0.0f) || !(h > 0.0f) || !std::isfinite(w) || !std::isfinite(h) || !std::isfinite(angle)) return;
+    prepare(texture);
+    const float cs = std::cos(angle), sn = std::sin(angle);
+    const auto corner = [&](float lx, float ly) { return Vec2{center.x + lx * cs - ly * sn, center.y + lx * sn + ly * cs}; };
+    const float hw = w * 0.5f, hh = h * 0.5f;
+    const Vec2 tl = corner(-hw, -hh), tr = corner(hw, -hh), br = corner(hw, hh), bl = corner(-hw, hh);
+    const int a = vertex(tl.x, tl.y, c, uv.x, uv.y), b = vertex(tr.x, tr.y, c, uv.x + uv.w, uv.y),
+              d = vertex(br.x, br.y, c, uv.x + uv.w, uv.y + uv.h), e = vertex(bl.x, bl.y, c, uv.x, uv.y + uv.h);
+    tri(a, b, d);
+    tri(a, d, e);
 }
 
 float Renderer2D::textWidth(std::string_view s, float capHeight) { return measureText(s, capHeight); }

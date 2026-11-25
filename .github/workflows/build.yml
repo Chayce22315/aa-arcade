@@ -25,6 +25,7 @@ jobs:
       - name: Data checks
         run: |
           python tools/gen_sfx.py --check
+          python tools/gen_art.py --check
           python tools/validate_settings.py --exe build\msvc-x64\Release\spindle.exe
           python tools/level_report.py --exe build\msvc-x64\Release\spindle.exe --rounds 200 --seeds 5
 
@@ -76,5 +77,7 @@ jobs:
         run: cmake --build build/core --parallel
       - name: Unit tests
         run: build/core/spindle_tests
-      - name: Sound recipes match the committed files
-        run: python3 tools/gen_sfx.py --check
+      - name: Sound and image recipes match the committed files
+        run: |
+          python3 tools/gen_sfx.py --check
+          python3 tools/gen_art.py --check

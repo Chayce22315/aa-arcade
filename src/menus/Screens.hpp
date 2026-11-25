@@ -14,6 +14,7 @@ struct ScreenContext {
     double subTick = 0.0;   // seconds since the last simulation tick (rotation extrapolation)
     double exitHold = 0.0;  // seconds the exit key has been held
     double exitHoldLimit = 0.0;
+    SDL_Texture* flame = nullptr; // data/art/flame.png; null if it failed to load
 };
 
 // Draws the whole cabinet screen for the current arcade state (everything procedural).

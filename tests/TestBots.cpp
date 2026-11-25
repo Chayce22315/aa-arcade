@@ -107,16 +107,19 @@ struct StallReport {
     int timeouts = 0;
     int rounds = 0;
     int claimed = 0;
+    int ignitions = 0;
+    int burnt = 0;
 };
 
 // Four bots of one difficulty play rounds [startRound, startRound + rounds) with plenty of tries.
-StallReport playRounds(config::Difficulty d, int startRound, int rounds, std::uint32_t seed, bool powerups) {
+StallReport playRounds(config::Difficulty d, int startRound, int rounds, std::uint32_t seed, bool powerups, bool fireMeter = false) {
     gameplay::LevelScript levels;
     gameplay::MatchConfig c;
     c.seed = seed * 7919u;
     c.tries = 9;
     c.startRound = startRound;
     if (powerups) c.powerups.assign(gameplay::kAllPowerups.begin(), gameplay::kAllPowerups.end());
+    c.fireMeter = fireMeter;
     std::vector<gameplay::ParticipantSpec> specs;
     std::array<std::unique_ptr<bots::BotController>, 4> bots;
     for (int s = 0; s < 4; ++s) {
@@ -139,6 +142,8 @@ StallReport playRounds(config::Difficulty d, int startRound, int rounds, std::ui
             if (e.type == gameplay::MatchEventType::StationFailed && e.value == 1) ++r.timeouts;
             if (e.type == gameplay::MatchEventType::RoundStarted) ++r.rounds;
             if (e.type == gameplay::MatchEventType::PowerupClaimed) ++r.claimed;
+            if (e.type == gameplay::MatchEventType::Ignited) ++r.ignitions;
+            if (e.type == gameplay::MatchEventType::Burned) r.burnt += e.value;
         }
     }
     return r;
@@ -163,4 +168,24 @@ TEST_CASE(bots_take_powerup_rings) {
     int claimed = 0;
     for (std::uint32_t seed = 1; seed <= 3; ++seed) claimed += playRounds(config::Difficulty::Expert, 3, 6, seed, true).claimed;
     CHECK(claimed >= 3);
+}
+
+// With the fire meter on, good bots chain needles until they catch fire, mash while burning, and
+// still never sit out a round.
+TEST_CASE(bots_catch_fire_and_never_stall_with_the_fire_meter) {
+    using D = config::Difficulty;
+    int expertIgnitions = 0, expertBurnt = 0;
+    for (D d : {D::Normal, D::Expert}) {
+        for (std::uint32_t seed = 1; seed <= 3; ++seed) {
+            const StallReport r = playRounds(d, 1, 12, seed, true, true);
+            if (r.timeouts != 0)
+                test::fail(__FILE__, __LINE__, std::format("{} seed {}: {} station(s) timed out", config::difficultyName(d), seed, r.timeouts));
+            if (d == D::Expert) {
+                expertIgnitions += r.ignitions;
+                expertBurnt += r.burnt;
+            }
+        }
+    }
+    CHECK(expertIgnitions >= 3);
+    CHECK(expertBurnt >= 1);
 }

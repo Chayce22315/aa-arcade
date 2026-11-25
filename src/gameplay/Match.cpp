@@ -12,6 +12,15 @@ namespace spindle::gameplay {
 Match::Match(const MatchConfig& config, const std::vector<ParticipantSpec>& participants, LevelProvider& levels)
     : config_(config), levels_(levels), fieldConfig_(makeFieldConfig(config.needleScale)) {
     config_.tries = std::clamp(config_.tries, 1, 9);
+    config_.fireCombo = std::clamp(config_.fireCombo, 2, 99);
+    config_.fireSeconds = std::clamp(config_.fireSeconds, 0.25, 10.0);
+    config_.fireChainWindow = std::clamp(config_.fireChainWindow, 0.25, 10.0);
+    fieldConfig_.fireEnabled = config_.fireMeter;
+    fieldConfig_.fireCombo = config_.fireCombo;
+    fieldConfig_.fireTicks = static_cast<int>(std::lround(config_.fireSeconds * geom::kTickRate));
+    fieldConfig_.chainWindowTicks = static_cast<int>(std::lround(config_.fireChainWindow * geom::kTickRate));
+    // A heat ring does nothing without the fire meter, so rounds never get one then.
+    if (!config_.fireMeter) std::erase(config_.powerups, PowerupKind::Heat);
     for (const ParticipantSpec& spec : participants) {
         if (spec.station < 0 || spec.station >= kMaxStations) continue;
         auto& slot = participants_[static_cast<std::size_t>(spec.station)];
@@ -57,6 +66,9 @@ void Match::prepareRound() {
     level_.round = round_;
     std::erase_if(level_.pickups, [&](const Pickup& p) { return suddenDeath_ || !contains(config_.powerups, p.kind); });
     rotor_ = Rotor(scaled(level_.rotation, config_.rotationScale));
+    // No fire in sudden death either: like the rings, it is decided by skill alone.
+    FieldConfig fieldConfig = fieldConfig_;
+    if (suddenDeath_) fieldConfig.fireEnabled = false;
     for (int s = 0; s < kMaxStations; ++s) {
         auto& p = participants_[static_cast<std::size_t>(s)];
         Playfield& f = fields_[static_cast<std::size_t>(s)];
@@ -66,10 +78,12 @@ void Match::prepareRound() {
         }
         p->inRound = suddenDeath_ ? std::find(suddenDeathSet_.begin(), suddenDeathSet_.end(), s) != suddenDeathSet_.end()
                                   : p->tries > 0;
-        if (p->inRound)
-            f.begin(level_, fieldConfig_);
-        else
+        if (p->inRound) {
+            f.begin(level_, fieldConfig);
+            f.setCombo(suddenDeath_ ? 0 : p->carriedCombo);
+        } else {
             f.reset();
+        }
     }
     phase_ = MatchPhase::Ready;
     phaseTime_ = 0.0;
@@ -80,6 +94,8 @@ void Match::startRound() {
     phase_ = MatchPhase::Playing;
     phaseTime_ = 0.0;
     roundStartTick_ = tick_;
+    for (int s = 0; s < kMaxStations; ++s)
+        if (stationInRound(s)) fields_[static_cast<std::size_t>(s)].startChain(tick_);
     emit(MatchEventType::RoundStarted, -1, round_);
 }
 
@@ -132,6 +148,14 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
             }
         }
         for (int k = f.takeShieldBreaks(); k > 0; --k) emit(MatchEventType::ShieldBroke, s);
+        for (int k = f.takeIgnitions(); k > 0; --k) {
+            ++p->ignitions;
+            emit(MatchEventType::Ignited, s);
+        }
+        if (const int burnt = f.takeBurns(); burnt > 0) {
+            p->burnt += burnt;
+            emit(MatchEventType::Burned, s, burnt);
+        }
         if (f.status() == FieldStatus::Cleared) emit(MatchEventType::StationCleared, s);
         if (f.status() == FieldStatus::Failed) emit(MatchEventType::StationFailed, s, 0);
         if (f.status() == FieldStatus::Playing) anyPlaying = true;
@@ -169,6 +193,8 @@ void Match::resolveRound() {
         players.push_back({s, p->tries});
         p->totalPlaced += f.placed();
         if (o.cleared) ++p->roundsCleared;
+        // Clearing banks the combo for the next round; failing loses it.
+        p->carriedCombo = o.cleared && !suddenDeath_ ? f.combo() : 0;
     }
 
     RoundDecision d = suddenDeath_ ? gameplay::resolveSuddenDeath(outcomes) : gameplay::resolveRound(players, outcomes, participantCount_);

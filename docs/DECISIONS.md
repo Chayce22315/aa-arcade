@@ -94,6 +94,25 @@ skill (land a needle on it). No effect touches the shared rotation or another st
 the brief's guarantees: one rotation for all, identical round conditions, independent collisions.
 No rings in sudden death, so tie-breaks stay pure.
 
+**One image, generated and committed like the sounds.** The fire meter's flame is the only picture in
+spindle: `data/art/flame.png` (128 x 256 RGBA, 12.8 KB). A flame drawn from triangles at meter size
+looked like a cone, and a soft orange glow is exactly what a texture does cheaply. It is produced by
+`tools/gen_art.py` (stdlib only, deterministic, checked in CI with `--check`), embedded in the exe,
+header-checked at boot step 4 (pure `PngInfo`, unit-tested) and turned into a texture at step 8 with
+SDL 3.4's built-in `SDL_LoadPNG_IO` (no image library). It is recreated on a render-device reset, and
+if it ever fails to load the screens draw a plain glow instead, so it is never required to play.
+Textured quads share the shape batch (`Renderer2D::sprite`); a texture change flushes it, which keeps
+draw order.
+
+**The fire meter rewards fast, close play and is strong on purpose.** It is the combo the brief asked
+for: quick needles chain, close calls count double, a full meter sets the station on fire for 1.5 s
+and fire needles burn through whatever they touch. Burning is a real advantage (a player who catches
+fire late in a round can often finish it), so the meter is tuned to need sustained risk: 8 points
+within 1 s gaps, a touch or a fail empties it, it never fills while burning, and only a cleared round
+banks it. Everything is per station (identical conditions for all), there is none in sudden death,
+and bots press fire while burning at a human mashing rate rather than the game's minimum interval.
+All four values are operator settings and uncalibrated.
+
 **Bots judge gaps by reachability, not by size alone.** On rounds where the circle swings back and
 forth, the widest gap can sit where the circle turns around and never reach the launcher; bots that
 waited for "the big gap" stalled until the round timer ran out. The bot now records which angles its

@@ -29,6 +29,15 @@ struct BotView {
     bool fireReady = false;     // the fire interval has elapsed (current, the bot's own button)
     std::span<const double> pickups; // relative angles of powerup rings not yet taken
     double claimAngle = 0.0;    // a needle within this angle of a ring's centre takes it
+    std::uint32_t revision = 0; // changes whenever the attached set changes (placements and burns)
+    // Fire meter, as of the delayed moment.
+    bool fireEnabled = false;
+    bool onFire = false;
+    double fireLeft = 0.0;      // seconds of fire left
+    int combo = 0;
+    int comboTarget = 0;        // combo that sets the station on fire
+    double chainLeft = 0.0;     // seconds before the combo drops (0 = no chain)
+    double closeCall = 0.0;     // a landing nearer than this to a needle counts double (radians)
     double roundTime = 0.0;
     double timeLeft = 0.0;      // seconds until the round timer runs out (shown on screen)
     double delay = 0.0;         // seconds of delay applied to this view

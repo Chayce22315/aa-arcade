@@ -59,7 +59,11 @@ struct Settings {
         int startRound = 1;
         std::uint32_t seed = 0;
         bool powerups = true;
-        std::string powerupTypes = "shield, skip, slim, mend";
+        std::string powerupTypes = "shield, skip, slim, mend, heat, purge, swift";
+        bool fireMeter = true;
+        int fireCombo = 8;
+        double fireSeconds = 1.5;
+        double fireChainWindow = 1.0;
         bool operator==(const Gameplay&) const = default;
     } gameplay;
 

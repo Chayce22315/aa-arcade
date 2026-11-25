@@ -12,6 +12,9 @@ std::string_view powerupName(PowerupKind kind) {
     case PowerupKind::Skip: return "skip";
     case PowerupKind::Slim: return "slim";
     case PowerupKind::Mend: return "mend";
+    case PowerupKind::Heat: return "heat";
+    case PowerupKind::Purge: return "purge";
+    case PowerupKind::Swift: return "swift";
     }
     return "shield";
 }

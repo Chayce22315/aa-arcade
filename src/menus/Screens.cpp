@@ -84,7 +84,39 @@ void drawPowerupIcon(render::Renderer2D& r, gameplay::PowerupKind kind, Vec2 c, 
         r.line({c.x - radius * 0.5f, c.y}, {c.x + radius * 0.5f, c.y}, t, col);
         r.line({c.x, c.y - radius * 0.5f}, {c.x, c.y + radius * 0.5f}, t, col);
         break;
+    case gameplay::PowerupKind::Heat: {
+        // a small flame: round base rising to a point
+        r.fillCircle({c.x, c.y + radius * 0.16f}, radius * 0.27f, col);
+        const Vec2 flame[] = {{c.x - radius * 0.25f, c.y + radius * 0.1f}, {c.x + radius * 0.05f, c.y - radius * 0.56f},
+                              {c.x + radius * 0.25f, c.y + radius * 0.1f}};
+        r.polyline(flame, t, col);
+        break;
     }
+    case gameplay::PowerupKind::Purge:
+        r.line({c.x - radius * 0.38f, c.y - radius * 0.38f}, {c.x + radius * 0.38f, c.y + radius * 0.38f}, t, col);
+        r.line({c.x - radius * 0.38f, c.y + radius * 0.38f}, {c.x + radius * 0.38f, c.y - radius * 0.38f}, t, col);
+        break;
+    case gameplay::PowerupKind::Swift:
+        for (float dy : {-0.12f, 0.26f}) {
+            const Vec2 chevron[] = {{c.x - radius * 0.4f, c.y + radius * (dy + 0.18f)}, {c.x, c.y + radius * (dy - 0.22f)},
+                                    {c.x + radius * 0.4f, c.y + radius * (dy + 0.18f)}};
+            r.polyline(chevron, t, col);
+        }
+        break;
+    }
+}
+
+const char* powerupBlurb(gameplay::PowerupKind kind) {
+    switch (kind) {
+    case gameplay::PowerupKind::Shield: return "one touch bounces off";
+    case gameplay::PowerupKind::Skip: return "one needle fewer";
+    case gameplay::PowerupKind::Slim: return "thinner needles";
+    case gameplay::PowerupKind::Mend: return "one try back";
+    case gameplay::PowerupKind::Heat: return "on fire at once";
+    case gameplay::PowerupKind::Purge: return "burns 2 old needles";
+    case gameplay::PowerupKind::Swift: return "faster needles";
+    }
+    return "";
 }
 
 const char* powerupLabel(gameplay::PowerupKind kind) {
@@ -93,8 +125,79 @@ const char* powerupLabel(gameplay::PowerupKind kind) {
     case gameplay::PowerupKind::Skip: return "skip";
     case gameplay::PowerupKind::Slim: return "slim";
     case gameplay::PowerupKind::Mend: return "mend";
+    case gameplay::PowerupKind::Heat: return "heat";
+    case gameplay::PowerupKind::Purge: return "purge";
+    case gameplay::PowerupKind::Swift: return "swift";
     }
     return "";
+}
+
+// ------------------------------------------------------------------ fire
+
+constexpr Color kFire{1.0f, 0.56f, 0.14f, 1.0f};
+constexpr Color kFireHot{1.0f, 0.86f, 0.5f, 1.0f};
+
+double ticksToSeconds(std::uint64_t from, std::uint64_t to) { return to > from ? static_cast<double>(to - from) * geom::kTickSeconds : 0.0; }
+
+// A flame standing on `base`, pointing along `angle` (radians, 0 = up the screen, clockwise).
+// Uses data/art/flame.png; if that failed to load, a plain glow stands in.
+void flame(const ScreenContext& c, Vec2 base, float w, float h, float angle, Color tint) {
+    const Vec2 up{std::sin(angle), -std::cos(angle)};
+    if (c.flame) {
+        c.r.sprite(c.flame, {base.x + up.x * h * 0.5f, base.y + up.y * h * 0.5f}, w, h, angle, tint);
+        return;
+    }
+    c.r.fillCircle({base.x + up.x * h * 0.3f, base.y + up.y * h * 0.3f}, w * 0.32f, kFire.withAlpha(tint.a * 0.85f));
+    c.r.fillCircle({base.x + up.x * h * 0.55f, base.y + up.y * h * 0.55f}, w * 0.18f, kFireHot.withAlpha(tint.a * 0.85f));
+}
+
+// 0..1 strength of the "on fire" look: quick flare-up, steady, then dying down over the last moments.
+float fireStrength(const gameplay::Playfield& f, std::uint64_t now) {
+    if (f.fireUntilTick() == 0 || now < f.fireStartTick()) return 0.0f;
+    const double since = ticksToSeconds(f.fireStartTick(), now);
+    const double left = f.onFire(now) ? ticksToSeconds(now, f.fireUntilTick()) : -ticksToSeconds(f.fireUntilTick(), now);
+    if (left < -0.3) return 0.0f;
+    const double in = std::min(1.0, since / 0.12);
+    const double out = std::clamp((left + 0.3) / 0.5, 0.0, 1.0);
+    return static_cast<float>(std::min(in, out));
+}
+
+// The meter: the flame image, grey when empty, filling in colour from the bottom as the combo grows.
+// While on fire it is full and burns down with the time left.
+void drawFireMeter(const ScreenContext& c, int s, const gameplay::Playfield& f, std::uint64_t now) {
+    if (!f.config().fireEnabled) return;
+    const Rect& col = c.layout.columns[static_cast<std::size_t>(s)];
+    const float w = px(c, 46), h = px(c, 92);
+    const Vec2 base{col.x + px(c, 64), col.y + px(c, 1012)};
+    const bool burning = f.onFire(now);
+    double fill = f.comboFill();
+    if (burning) {
+        const double total = ticksToSeconds(f.fireStartTick(), f.fireUntilTick());
+        fill = total > 0.0 ? ticksToSeconds(now, f.fireUntilTick()) / total : 0.0;
+    }
+    const float flick = burning ? 1.0f + 0.06f * std::sin(static_cast<float>(c.time) * 31.0f) : 1.0f;
+    if (c.flame) {
+        c.r.sprite(c.flame, {base.x, base.y - h * 0.5f}, w, h, 0.0f, Color{0.5f, 0.5f, 0.5f, 0.42f});
+        if (fill > 0.0) {
+            const float fh = h * static_cast<float>(fill);
+            const Color tint = burning ? kFireHot : colors::kWhite;
+            c.r.sprite(c.flame, {base.x, base.y - fh * 0.5f * flick}, w * flick, fh * flick, 0.0f, tint,
+                       Rect{0.0f, 1.0f - static_cast<float>(fill), 1.0f, static_cast<float>(fill)});
+        }
+    } else {
+        c.r.ring({base.x, base.y - h * 0.45f}, w * 0.42f, px(c, 1.5f), colors::kDim);
+        if (fill > 0.0) c.r.fillCircle({base.x, base.y - h * 0.45f}, w * 0.42f * static_cast<float>(fill), kFire);
+    }
+    if (burning) {
+        c.r.text("fire", {base.x + px(c, 34), base.y - px(c, 52)}, px(c, 18), kFire);
+    } else if (f.combo() > 0) {
+        c.r.text(std::format("x{}", f.combo()), {base.x + px(c, 34), base.y - px(c, 52)}, px(c, 18), colors::kWhite);
+        // The chain: a bar that runs out if the next needle is too slow.
+        const int left = f.chainTicksLeft(now);
+        const int window = std::max(1, f.config().chainWindowTicks);
+        const float bw = px(c, 48) * static_cast<float>(std::clamp(static_cast<double>(left) / window, 0.0, 1.0));
+        c.r.fillRect({base.x + px(c, 34), base.y - px(c, 22), bw, px(c, 3)}, colors::kDim);
+    }
 }
 
 void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const StationLook& look) {
@@ -113,6 +216,27 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
         const double a = rel + angle;
         return Vec2{centre.x + px(c, L) * static_cast<float>(std::cos(a)), centre.y + px(c, L) * static_cast<float>(std::sin(a))};
     };
+    const std::uint64_t now = m.tickCount();
+    const float core = px(c, static_cast<float>(geom::kCoreRadius));
+
+    // On fire: the whole circle burns, flames standing out of the rim and around the core.
+    if (const float heat = fireStrength(f, now); heat > 0.0f) {
+        const float t = static_cast<float>(c.time);
+        constexpr int kRim = 18, kCore = 9;
+        for (int i = 0; i < kRim; ++i) {
+            const float a = static_cast<float>(angle) + kTau * static_cast<float>(i) / kRim;
+            const float flick = 0.75f + 0.25f * std::sin(t * 17.0f + static_cast<float>(i) * 2.3f);
+            const float r = px(c, L + ball * 0.6f);
+            flame(c, {centre.x + r * std::cos(a), centre.y + r * std::sin(a)}, px(c, 30) * heat, px(c, 58) * heat * flick,
+                  a + std::numbers::pi_v<float> * 0.5f, colors::kWhite.withAlpha(heat));
+        }
+        for (int i = 0; i < kCore; ++i) {
+            const float a = -static_cast<float>(angle) * 0.5f + kTau * static_cast<float>(i) / kCore;
+            const float flick = 0.7f + 0.3f * std::sin(t * 21.0f + static_cast<float>(i) * 1.7f);
+            flame(c, {centre.x + core * 0.8f * std::cos(a), centre.y + core * 0.8f * std::sin(a)}, px(c, 34) * heat,
+                  px(c, 50) * heat * flick, a + std::numbers::pi_v<float> * 0.5f, colors::kWhite.withAlpha(heat));
+        }
+    }
 
     // Powerup rings still to be taken, turning with the circle.
     for (const auto& ring : f.pickups())
@@ -128,24 +252,34 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
         c.r.line(centre, p, needle, col);
         drawBall(c, p, ball, 0, col, false);
     }
+    // Burnt needles flare up and vanish where they were.
+    for (const gameplay::BurnMark& b : f.burns()) {
+        const double since = ticksToSeconds(b.tick, now);
+        if (now < b.tick || since >= 0.45) continue;
+        const float k = static_cast<float>(since / 0.45);
+        const Vec2 p = onCircle(b.angle);
+        const float a = static_cast<float>(b.angle + angle) + std::numbers::pi_v<float> * 0.5f;
+        flame(c, p, px(c, 34) * (1.0f + k), px(c, 60) * (0.6f + k), a, colors::kWhite.withAlpha(1.0f - k));
+        c.r.ring(p, px(c, ball * (1.0f + 2.2f * k)), px(c, 2.0f), kFire.withAlpha(1.0f - k));
+    }
     for (std::size_t i = 0; i < f.flying().size(); ++i) {
         const auto& fl = f.flying()[i];
         const Vec2 p{centre.x, centre.y + px(c, static_cast<float>(fl.distance))};
         const bool hit = f.status() == gameplay::FieldStatus::Failed && f.conflictFlying() && *f.conflictFlying() == i;
-        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fg, true);
+        if (fl.fire) flame(c, p, px(c, ball * 2.6f), px(c, ball * 5.5f), std::numbers::pi_v<float>, colors::kWhite);
+        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fl.fire ? kFireHot : fg, true);
     }
     // Waiting needles: the next one sits at the launcher, the rest queue below it.
     const int left = f.needlesLeft();
     const int shown = std::min(left, 10);
+    const Color next = f.onFire(now) ? kFireHot : fg; // launched now, it would be a fire needle
     for (int k = 0; k < shown; ++k) {
         const float y = static_cast<float>(geom::kLaunchDistance + geom::kQueueSpacing * k);
-        const Color col = k == 0 ? fg : fg.withAlpha(std::max(0.25f, 1.0f - 0.07f * static_cast<float>(k)));
+        const Color col = k == 0 ? next : fg.withAlpha(std::max(0.25f, 1.0f - 0.07f * static_cast<float>(k)));
         drawBall(c, {centre.x, centre.y + px(c, y)}, ball, left - k, col, true);
     }
     // Shield: a halo around the core while armed, a burst when it saves a needle.
-    const float core = px(c, static_cast<float>(geom::kCoreRadius));
     if (f.shieldArmed()) c.r.ring(centre, core + px(c, 9), px(c, 2.2f), fg);
-    const std::uint64_t now = m.tickCount();
     if (f.shieldBreakTick() > 0 && now >= f.shieldBreakTick()) {
         const double since = static_cast<double>(now - f.shieldBreakTick()) * geom::kTickSeconds;
         if (since < 0.45) {
@@ -232,10 +366,13 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
             drawStationStatus(c, s, f.failReason() == gameplay::FailReason::Timeout ? "time" : "miss", Color{1.0f, 0.45f, 0.45f, 1.0f});
         } else if (m.phase() == gameplay::MatchPhase::Ready) {
             drawStationStatus(c, s, "ready", colors::kDim, 24);
+        } else if (f.onFire(now)) {
+            drawStationStatus(c, s, "on fire!", kFire, 28);
         } else if (f.lastClaim() && now >= f.lastClaimTick() &&
                    static_cast<double>(now - f.lastClaimTick()) * geom::kTickSeconds < 0.9) {
             drawStationStatus(c, s, powerupLabel(*f.lastClaim()), colors::kWhite, 26);
         }
+        drawFireMeter(c, s, f, now);
         if (m.phase() == gameplay::MatchPhase::Playing && f.status() == gameplay::FieldStatus::Playing) {
             const double left = m.roundTimeLeft();
             if (left <= 10.0) textAt(c, std::format("{}", static_cast<int>(std::ceil(left))), col.x + col.w * 0.5f, col.y + px(c, 1000), 20,
@@ -286,28 +423,37 @@ void drawHowTo(const ScreenContext& c) {
         "out of tries means out of the match",
         "the last player standing wins",
     };
-    float y = 210;
+    float y = 190;
     for (const char* l : lines) {
         textAt(c, l, cx, areaY(c, y), 22, colors::kWhite);
-        y += 54;
+        y += 50;
     }
-    // Powerup legend (only the rings the operator enabled).
+    // Powerup legend (only the rings the operator enabled; heat only with the fire meter).
     const auto& gp = c.arcade.settings().gameplay;
-    const auto kinds = gp.powerups ? gameplay::parsePowerupList(gp.powerupTypes) : std::vector<gameplay::PowerupKind>{};
+    auto kinds = gp.powerups ? gameplay::parsePowerupList(gp.powerupTypes) : std::vector<gameplay::PowerupKind>{};
+    if (!gp.fireMeter) std::erase(kinds, gameplay::PowerupKind::Heat);
     if (!kinds.empty()) {
-        textAt(c, "land a needle on a ring to take its power", cx, areaY(c, 610), 20, colors::kWhite);
-        const float spacing = 230.0f;
+        textAt(c, "land a needle on a ring to take its power", cx, areaY(c, 566), 20, colors::kWhite);
+        const float spacing = std::min(230.0f, 1800.0f / static_cast<float>(kinds.size()));
         float x = cx - px(c, spacing) * 0.5f * static_cast<float>(kinds.size() - 1);
         for (gameplay::PowerupKind k : kinds) {
-            const char* what = k == gameplay::PowerupKind::Shield ? "one touch bounces off"
-                               : k == gameplay::PowerupKind::Skip ? "one needle fewer"
-                               : k == gameplay::PowerupKind::Slim ? "thinner needles"
-                                                                  : "one try back";
-            drawPowerupIcon(c.r, k, {x, areaY(c, 682)}, px(c, 15), colors::kWhite);
-            textAt(c, powerupLabel(k), x, areaY(c, 712), 17, colors::kWhite);
-            textAt(c, what, x, areaY(c, 740), 13, colors::kDim);
+            drawPowerupIcon(c.r, k, {x, areaY(c, 632)}, px(c, 15), colors::kWhite);
+            textAt(c, powerupLabel(k), x, areaY(c, 660), 17, colors::kWhite);
+            textAt(c, powerupBlurb(k), x, areaY(c, 686), 13, colors::kDim);
             x += px(c, spacing);
         }
+    }
+    // The fire meter: the flame fills with the combo; full means on fire.
+    if (gp.fireMeter) {
+        constexpr std::string_view kFireLine = "quick needles fill your flame   close calls count double   full = on fire, needles burn through";
+        const float fx = cx - (px(c, 30) + render::Renderer2D::textWidth(kFireLine, px(c, 17))) * 0.5f + px(c, 14);
+        const float fill = static_cast<float>(0.5 + 0.5 * std::sin(c.time * 1.6));
+        if (c.flame) {
+            c.r.sprite(c.flame, {fx, areaY(c, 742)}, px(c, 28), px(c, 56), 0.0f, Color{0.5f, 0.5f, 0.5f, 0.42f});
+            c.r.sprite(c.flame, {fx, areaY(c, 770) - px(c, 56) * fill * 0.5f}, px(c, 28), px(c, 56) * fill, 0.0f, colors::kWhite,
+                       Rect{0.0f, 1.0f - fill, 1.0f, fill});
+        }
+        c.r.text(kFireLine, {fx + px(c, 30), areaY(c, 734)}, px(c, 17), kFire);
     }
     // A small animated example: a needle flying into a turning circle.
     const Vec2 centre{cx, areaY(c, 860)};

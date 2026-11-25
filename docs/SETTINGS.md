@@ -17,7 +17,7 @@ and a comment describing the valid values.
   (temporary file, flush, rename), so a power cut cannot leave a half-written file.
 - `true/false`, `yes/no`, `on/off` are accepted wherever `0 | 1` is shown. `fullscreen = 1` / `0` are
   accepted as `borderless` / `windowed`.
-- `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend` (or `none`); it is stored in
+- `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend`, `heat`, `purge`, `swift` (or `none`); it is stored in
   that canonical order. An unknown name makes the whole value invalid (default used).
 
 Check a file without starting the game:
@@ -91,7 +91,11 @@ Round rules shared by every station. Speed values are uncalibrated: tune by feel
 | `start_round` | `1` | 1..50 | round number a match starts at |
 | `seed` | `0` | text | 0 = new random levels each match; any other number repeats the same levels |
 | `powerups` | `1` | 0 \| 1 | 1 = powerup rings appear on the circles from round 3 (never in sudden death) |
-| `powerup_types` | `shield, skip, slim, mend` | text | which rings may appear: shield, skip, slim, mend (comma list, or none) |
+| `powerup_types` | `shield, skip, slim, mend, heat, purge, swift` | text | which rings may appear: shield, skip, slim, mend, heat, purge, swift (comma list, or none); heat needs the fire meter |
+| `fire_meter` | `1` | 0 \| 1 | 1 = quick needles fill a combo meter; full = on fire, needles burn through (never in sudden death) |
+| `fire_combo` | `8` | 4..30 | combo points to catch fire; a needle is 1, a close call 2 |
+| `fire_seconds` | `1.5` | 0.5..5.0 | seconds a player stays on fire |
+| `fire_chain_window` | `1.0` | 0.5..5.0 | seconds allowed between needles before the combo drops |
 
 ### [Bots]
 

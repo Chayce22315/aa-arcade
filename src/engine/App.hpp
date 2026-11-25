@@ -19,6 +19,7 @@
 #include "render/DisplaySetup.hpp"
 #include "render/Layout.hpp"
 #include "render/Renderer2D.hpp"
+#include "render/Textures.hpp"
 
 namespace spindle {
 
@@ -97,6 +98,7 @@ private:
     assets::ControllerDbStatus controllerDb_;
     render::Display display_;
     std::unique_ptr<render::Renderer2D> renderer_;
+    render::Textures textures_; // declared after display_ so it is destroyed before the renderer
     render::ScreenLayout layout_;
     input::InputSystem input_;
     audio::AudioSystem audio_;

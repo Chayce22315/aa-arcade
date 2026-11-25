@@ -130,6 +130,10 @@ gameplay::MatchConfig ArcadeMachine::matchConfig(bool demo) {
     c.rotationScale = settings_.gameplay.rotationSpeedScale;
     c.needleScale = settings_.gameplay.needleSpeedScale;
     if (settings_.gameplay.powerups) c.powerups = gameplay::parsePowerupList(settings_.gameplay.powerupTypes);
+    c.fireMeter = settings_.gameplay.fireMeter;
+    c.fireCombo = settings_.gameplay.fireCombo;
+    c.fireSeconds = settings_.gameplay.fireSeconds;
+    c.fireChainWindow = settings_.gameplay.fireChainWindow;
     return c;
 }
 
@@ -260,6 +264,8 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
         case gameplay::MatchEventType::NoWinner: sound(audio::SoundId::Fail, demo); break;
         case gameplay::MatchEventType::PowerupClaimed: sound(audio::SoundId::Powerup, demo); break;
         case gameplay::MatchEventType::ShieldBroke: sound(audio::SoundId::Shield, demo); break;
+        case gameplay::MatchEventType::Ignited: sound(audio::SoundId::Ignite, demo); break;
+        case gameplay::MatchEventType::Burned: sound(audio::SoundId::Burn, demo); break;
         default: break;
         }
     }

@@ -17,16 +17,16 @@ Dependency rule: nothing in the core includes SDL. The platform turns SDL into p
 |---|---|---|
 | `engine/` | core: `Log`; platform: the rest | `App` main loop, `Boot` (the 10 steps), `Paths` (portable folder or user folder), `SelfTest`, `Branding` (title, version), RAII SDL handles |
 | `config/` | core | `IniDocument` (comment- and order-preserving INI), `AtomicFile` (temp + flush + rename), `Settings` (one schema drives loading, validation, saving and the default file) |
-| `assets/` | core: `EmbeddedAssets`, `Sha256`, `ControllerDbPin`; platform: `Downloader`, `ControllerDb` | resources compiled into the exe; the one optional download (WinHTTP, https only, size-capped, pinned SHA-256) |
+| `assets/` | core: `EmbeddedAssets`, `Sha256`, `PngInfo`, `ControllerDbPin`; platform: `Downloader`, `ControllerDb` | resources compiled into the exe (scripts, sounds, the flame image); PNG header + CRC check; the one optional download (WinHTTP, https only, size-capped, pinned SHA-256) |
 | `collision/` | core | pure angular maths: wrap, separation threshold `2 asin(r/L)`, flight-time contact tests, sub-step count |
 | `scripting/` | core | `LuaSandbox`: one isolated Lua 5.4 state with base/math/string/table only, a memory cap, an instruction budget per call and a seeded PCG32 `math.random` |
-| `gameplay/` | core | `Rotor` (the shared rotation), `Playfield` (one station: placements, flights, collision, powerup effects), `Powerups` (ring kinds and constants), `LevelDef` + validation, `LevelScript` (Lua levels and rings with fallback), `MatchRules` (pure T1-T11 decisions), `Match` (rounds, phases, tries, elimination, mend) |
+| `gameplay/` | core | `Rotor` (the shared rotation), `Playfield` (one station: placements, flights, collision, powerup effects, fire meter and burning), `Powerups` (ring kinds and constants), `LevelDef` + validation, `LevelScript` (Lua levels and rings with fallback), `MatchRules` (pure T1-T11 decisions), `Match` (rounds, phases, tries, elimination, mend, banked combos) |
 | `players/` | core | `PlayerManager`: the mode rule and bot fill (stations keep their physical columns) |
-| `bots/` | core | `BotBrain` (sandboxed `bot.lua` per bot), `BotController` (delayed observation, fire presses only); `bot.lua` keeps a reachability map of the angles its aim passes so swinging circles never stall it |
+| `bots/` | core | `BotBrain` (sandboxed `bot.lua` per bot), `BotController` (delayed observation with its own copy of the needles per moment, since burns remove needles; fire presses only); `bot.lua` keeps a reachability map of the angles its aim passes so swinging circles never stall it, chases the fire meter and mashes while burning |
 | `arcade/` | core | `ArcadeMachine` (attract, insert coin, join, playing, game over), `Credits`, `Bookkeeping` |
 | `input/` | core: `Keybinds`; platform: `DeviceRegistry`, `InputSystem` | keyboards, gamepads and raw joysticks, hotplug, assignment, bindings, timestamped actions |
 | `audio/` | core: `Wav`, `SoundId`; platform: `AudioSystem` | WAV parsing; a fixed 16-voice mixer on one SDL audio stream |
-| `render/` | core: `StrokeFont`, `Layout`, `Geometry2D`; platform: `Renderer2D`, `DisplaySetup` | procedural drawing with 1-pixel alpha feathering, the four-column layout, window and display modes |
+| `render/` | core: `StrokeFont`, `Layout`, `Geometry2D`; platform: `Renderer2D`, `Textures`, `DisplaySetup` | procedural drawing with 1-pixel alpha feathering plus textured quads (the flame) in the same batch, the four-column layout, window and display modes |
 | `menus/` | core: `MenuModel`; platform: `Screens`, `ServiceMenu` | every cabinet screen and the operator menu |
 
 ## The frame
@@ -44,7 +44,8 @@ fixed 240 Hz tick ────────────────────�
    │                                       ├─ BotController.think (before the tick, delayed view)
    │                                       ├─ Rotor.advance  (once)
    │                                       ├─ Playfield.step x alive stations (shared rotor motion,
-   │                                       │    powerup rings taken -> shield / skip / slim, mend -> tries)
+   │                                       │    rings taken -> shield / skip / slim / heat / purge / swift,
+   │                                       │    mend -> tries; combo -> on fire -> fire needles burn)
    │                                       └─ MatchRules when every station is done
    └─ events ──> AudioSystem.play, bookkeeping.ini (atomic)
 render (vsync or frame cap) ──> Screens / ServiceMenu ──> Renderer2D ──> one SDL_RenderGeometry
@@ -57,7 +58,7 @@ render (vsync or frame cap) ──> Screens / ServiceMenu ──> Renderer2D ─
   independent of the frame rate.
 - **Rendering**: the latest tick is drawn; the rotor angle is extrapolated by the time since that tick
   (at most 4.2 ms) so motion is smooth at any refresh rate. All geometry of a frame goes out in one
-  batched `SDL_RenderGeometry` call.
+  batched `SDL_RenderGeometry` call (plus one per switch to and from the flame texture).
 - **Threads**: the game runs on the main thread. The only other thread is SDL's audio callback, which
   reads clips that never change after boot and a voice table guarded by the audio stream lock;
   volumes are atomics.
@@ -69,6 +70,7 @@ render (vsync or frame cap) ──> Screens / ServiceMenu ──> Renderer2D ─
 | level script `scripts/levels.lua` | embedded; optional override `data/scripts/levels.lua` next to the exe | override errors -> embedded for that round; embedded errors -> built-in emergency round |
 | bot script `scripts/bots/bot.lua` | embedded; optional override `data/scripts/bots/bot.lua` | override rejected at boot if it does not load -> embedded |
 | sound effects | embedded WAVs generated by `tools/gen_sfx.py` | a clip that does not parse stays silent (logged) |
+| flame image `art/flame.png` | embedded PNG generated by `tools/gen_art.py`; header checked at boot step 4, texture made at step 8 and again after a device reset | a plain procedural glow in its place (logged) |
 | font, circles, needles, menus | code | - |
 | `gamecontrollerdb.txt` | downloaded once, verified against the pinned SHA-256 | SDL's built-in mappings |
 | `settings.ini`, `bookkeeping.ini`, `logs/` | next to the exe, else the user folder | defaults / empty counters |

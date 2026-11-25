@@ -29,9 +29,14 @@ private:
         double angle = 0.0;
         double speed = 0.0;
         double accel = 0.0;
-        int attachedCount = 0;
+        std::vector<double> attached; // burns remove needles, so each moment keeps its own copy
+        std::uint32_t revision = 0;
         int needlesLeft = 0;
         int inFlight = 0;
+        bool onFire = false;
+        double fireLeft = 0.0;
+        int combo = 0;
+        double chainLeft = 0.0;
     };
 
     std::unique_ptr<BotBrain> brain_;

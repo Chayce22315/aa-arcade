@@ -16,10 +16,15 @@ enum class PowerupKind {
     Shield, // the next touch this round bounces off; that needle returns to the queue
     Skip,   // one needle fewer to place this round
     Slim,   // this station's balls shrink for the rest of the round
-    Mend    // gives back one lost try (never above the starting tries; no effect in sudden death)
+    Mend,   // gives back one lost try (never above the starting tries; no effect in sudden death)
+    Heat,   // fills the fire meter: the station is on fire at once (only with the fire meter on)
+    Purge,  // burns away the pre-placed needles nearest to where the ring was taken
+    Swift   // this station's needles fly faster for the rest of the round
 };
 
-inline constexpr std::array<PowerupKind, 4> kAllPowerups{PowerupKind::Shield, PowerupKind::Skip, PowerupKind::Slim, PowerupKind::Mend};
+inline constexpr std::array<PowerupKind, 7> kAllPowerups{PowerupKind::Shield, PowerupKind::Skip,  PowerupKind::Slim,
+                                                         PowerupKind::Mend,   PowerupKind::Heat,  PowerupKind::Purge,
+                                                         PowerupKind::Swift};
 
 struct Pickup {
     double angle = 0.0; // relative to the rotor, radians
@@ -33,6 +38,10 @@ inline constexpr double kSlimFactor = 0.7;
 // A needle claims a ring when it lands within this fraction of the normal minimum needle separation
 // of the ring's centre (each side).
 inline constexpr double kClaimFactor = 0.75;
+// Needle speed multiplier while swift. Uncalibrated: tune by feel.
+inline constexpr double kSwiftFactor = 1.6;
+// Pre-placed needles a purge burns away.
+inline constexpr int kPurgeCount = 2;
 } // namespace powerup
 
 std::string_view powerupName(PowerupKind kind);

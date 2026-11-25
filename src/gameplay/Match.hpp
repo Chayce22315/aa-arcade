@@ -31,6 +31,9 @@ struct Participant {
     int roundsCleared = 0;
     int totalPlaced = 0;
     int powerupsClaimed = 0;
+    int ignitions = 0;    // times this player caught fire
+    int burnt = 0;        // needles their fire needles and purges burnt away
+    int carriedCombo = 0; // fire-meter combo banked by clearing the previous round
     bool inRound = false; // plays the current (or upcoming) round
 };
 
@@ -44,6 +47,12 @@ struct MatchConfig {
     double rotationScale = 1.0;
     double needleScale = 1.0;
     std::vector<PowerupKind> powerups; // ring kinds rounds may contain; empty = powerups off
+
+    // Fire meter (docs/RULES.md): a combo of quick placements; full = on fire for fireSeconds.
+    bool fireMeter = false;
+    int fireCombo = 8;
+    double fireSeconds = 1.5;
+    double fireChainWindow = 1.0;
 };
 
 enum class MatchPhase { Ready, Playing, Resolving, Over };
@@ -62,7 +71,9 @@ enum class MatchEventType {
     NoWinner,
     PowerupClaimed, // station, value = PowerupKind
     TryGained,      // station, value = tries now (mend)
-    ShieldBroke     // station
+    ShieldBroke,    // station
+    Ignited,        // station: the station is on fire
+    Burned          // station, value = needles burnt away this tick
 };
 
 struct MatchEvent {

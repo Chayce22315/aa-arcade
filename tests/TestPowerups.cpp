@@ -262,9 +262,13 @@ TEST_CASE(powerups_level_script_places_valid_rings) {
                 return;
             }
             if (round < 3) CHECK(def->pickups.empty());
-            int mends = 0;
-            for (const auto& p : def->pickups) mends += p.kind == PowerupKind::Mend;
+            int mends = 0, heats = 0;
+            for (const auto& p : def->pickups) {
+                mends += p.kind == PowerupKind::Mend;
+                heats += p.kind == PowerupKind::Heat;
+            }
             CHECK(mends <= 1);
+            CHECK(heats <= 1);
             rings += static_cast<int>(def->pickups.size());
         }
     }

@@ -61,6 +61,15 @@ std::string formatReal(double v) {
     return s;
 }
 
+std::string validPowerups() {
+    std::string out;
+    for (gameplay::PowerupKind k : gameplay::kAllPowerups) {
+        out += gameplay::powerupName(k);
+        out += ", ";
+    }
+    return out + "none";
+}
+
 template <class E, std::size_t N>
 std::span<const Choice<E>> choices(const Choice<E> (&a)[N]) {
     return std::span<const Choice<E>>(a, N);
@@ -110,7 +119,12 @@ void visitAll(Settings& s, V& v) {
     v.integer("start_round", s.gameplay.startRound, 1, 50, "round number a match starts at");
     v.seed("seed", s.gameplay.seed, "0 = new random levels each match; any other number repeats the same levels");
     v.boolean("powerups", s.gameplay.powerups, "1 = powerup rings appear on the circles from round 3 (never in sudden death)");
-    v.powerupList("powerup_types", s.gameplay.powerupTypes, "which rings may appear: shield, skip, slim, mend (comma list, or none)");
+    v.powerupList("powerup_types", s.gameplay.powerupTypes,
+                  "which rings may appear: shield, skip, slim, mend, heat, purge, swift (comma list, or none); heat needs the fire meter");
+    v.boolean("fire_meter", s.gameplay.fireMeter, "1 = quick needles fill a combo meter; full = on fire, needles burn through (never in sudden death)");
+    v.integer("fire_combo", s.gameplay.fireCombo, 4, 30, "combo points to catch fire; a needle is 1, a close call 2");
+    v.real("fire_seconds", s.gameplay.fireSeconds, 0.5, 5.0, "seconds a player stays on fire");
+    v.real("fire_chain_window", s.gameplay.fireChainWindow, 0.5, 5.0, "seconds allowed between needles before the combo drops");
 
     v.section("Bots", "Computer players follow exactly the same rules as humans.");
     v.integer("singleplayer_bots", s.bots.singleplayerBots, 0, 3, "bots joining a game with exactly one human");
@@ -228,7 +242,7 @@ public:
         if (!raw) return;
         std::vector<std::string> unknown;
         const auto kinds = gameplay::parsePowerupList(*raw, &unknown);
-        if (!unknown.empty()) return invalid(key, *raw, "unknown powerup '" + unknown.front() + "' (valid: shield, skip, slim, mend, none)");
+        if (!unknown.empty()) return invalid(key, *raw, "unknown powerup '" + unknown.front() + "' (valid: " + validPowerups() + ")");
         ref = gameplay::formatPowerupList(kinds);
     }
     void seed(std::string_view key, std::uint32_t& ref, std::string_view) {

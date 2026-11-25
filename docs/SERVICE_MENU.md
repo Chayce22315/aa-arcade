@@ -26,9 +26,9 @@ P1 fire to select / change.
 | keybinds | Select an action, then press the new key. Also "keyboard per station" and, per station, the keyboard it listens to (select, then press any key on that keyboard; left resets it to any keyboard). |
 | display test | Square grid, diagonals, the four station circles with moving needles, resolution, renderer, vsync and frame time. |
 | video | Resolution (auto or any mode the monitor reports), fullscreen mode, vsync, monitor, frame cap; "apply now" previews it. |
-| sound test | Plays each sound (including the powerup and shield sounds); shows the audio device or "unavailable (silent)". |
+| sound test | Plays each sound (including the powerup, shield, ignite and burn sounds); shows the audio device or "unavailable (silent)". |
 | volumes | Master, game sounds, coin and menu sounds (heard while changing), attract sound. |
-| game settings | Tries, round time limit, rotation speed, needle speed, ready delay, start round, level seed, powerups on/off and each ring type (shield, skip, slim, mend) on/off. |
+| game settings | Tries, round time limit, rotation speed, needle speed, ready delay, start round, level seed, powerups on/off and each ring type (shield, skip, slim, mend, heat, purge, swift) on/off, the fire meter on/off, the combo to catch fire, seconds on fire and the combo chain window. |
 | coin settings | Free play, credits per coin, credits per player, max credits, join window, game over time, exit hold (0 = locked cabinet). |
 | bot settings | Bots with one player, bots with two or more players, bot difficulty, demo difficulty. |
 | bookkeeping | Coins, service credits, singleplayer and multiplayer games, wins by players and by bots, play time; "clear bookkeeping" (press twice). |

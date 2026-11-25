@@ -39,7 +39,7 @@ end
 
 -- Powerup rings: a needle landing on a ring takes its power. They start at round 3 and sit well clear
 -- of the pre-placed needles (so every ring can be taken): in a crowded circle they go into the
--- middle of the wider gaps. At most one ring per round is a mend.
+-- middle of the wider gaps. At most one ring per round is a mend, and at most one is a heat.
 local function place_pickups(round, prepins, limits)
   local kinds = limits.powerups
   if #kinds == 0 or round < 3 then return {} end
@@ -74,7 +74,8 @@ local function place_pickups(round, prepins, limits)
   end
 
   local out = {}
-  local mend_used = false
+  local once = { mend = true, heat = true } -- kinds that appear at most once per round
+  local used = {}
   for _, a in ipairs(candidates) do
     if #out >= count then break end
     local ok = true
@@ -83,8 +84,8 @@ local function place_pickups(round, prepins, limits)
     end
     if ok then
       local kind = kinds[math.random(1, #kinds)]
-      if kind == "mend" then
-        if mend_used then kind = nil else mend_used = true end
+      if once[kind] then
+        if used[kind] then kind = nil else used[kind] = true end
       end
       if kind then out[#out + 1] = { angle = a, kind = kind } end
     end

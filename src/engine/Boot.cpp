@@ -9,6 +9,8 @@
 #include <random>
 
 #include "assets/ControllerDbPin.hpp"
+#include "assets/EmbeddedAssets.hpp"
+#include "assets/PngInfo.hpp"
 #include "config/AtomicFile.hpp"
 #include "engine/App.hpp"
 #include "engine/Branding.hpp"
@@ -138,6 +140,13 @@ bool App::bootLoad() {
 
     const int clips = audio_.loadClips();
     log::info("audio: {} of {} sounds loaded", clips, audio::kSounds.size());
+    // The image becomes a texture at step 8, once there is a renderer; its header is checked now.
+    if (const auto png = assets::findEmbedded(render::kFlameImage); png && assets::readPngInfo(*png)) {
+        const auto info = *assets::readPngInfo(*png);
+        log::info("assets: {} {}x{} ({} bytes)", render::kFlameImage, info.width, info.height, png->size());
+    } else {
+        log::warn("assets: {} missing or damaged", render::kFlameImage);
+    }
     const int keyIssues = input_.configure(settings_);
     settingsIssues_ += static_cast<std::size_t>(keyIssues);
     return true;
@@ -163,6 +172,10 @@ bool App::bootDisplay() {
     }
     step(8, "loading display-dependent resources");
     renderer_ = std::make_unique<render::Renderer2D>(display_.renderer());
+    if (std::string texErr; textures_.load(display_.renderer(), &texErr))
+        log::info("boot: flame image loaded ({})", render::kFlameImage);
+    else
+        log::warn("boot: {}; the fire meter is drawn without it", texErr);
     updateLayout();
     return true;
 }

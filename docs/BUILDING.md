@@ -67,6 +67,7 @@ build/core/spindle_tests
 | Tool | Purpose |
 |---|---|
 | `gen_sfx.py` | regenerates `data/audio/*.wav` from the recipes; `--check` verifies the committed files |
+| `gen_art.py` | regenerates `data/art/flame.png` (the fire meter's flame); `--check` verifies the committed file |
 | `run_selftest.py` | runs and collects the self-test (see above) |
 | `validate_settings.py --exe spindle settings.ini` | checks a settings file against the game's schema |
 | `level_report.py --exe spindle` | generates rounds through the real level script and checks the curve |
@@ -78,6 +79,7 @@ build/core/spindle_tests
   `data/scripts/levels.lua` next to the exe overrides the embedded one without rebuilding.
 - **Bots**: the same with `data/scripts/bots/bot.lua`.
 - **Sounds**: edit the recipes in `tools/gen_sfx.py`, run it, commit the WAVs, rebuild.
+- **The flame image**: edit `tools/gen_art.py`, run it, commit `data/art/flame.png`, rebuild.
 - **Title**: `src/engine/Branding.hpp` and the CMake project name.
 
 ## Continuous integration

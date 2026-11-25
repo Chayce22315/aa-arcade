@@ -62,7 +62,10 @@ set(SPINDLE_EMBEDDED_FILES
   audio/winner.wav
   audio/round_start.wav
   audio/powerup.wav
-  audio/shield.wav)
+  audio/shield.wav
+  audio/ignite.wav
+  audio/burn.wav
+  art/flame.png)
 spindle_embed_files(
   OUTPUT ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data
@@ -76,6 +79,7 @@ add_library(spindle_core STATIC
   src/config/Settings.cpp
   src/assets/Sha256.cpp
   src/assets/EmbeddedAssets.cpp
+  src/assets/PngInfo.cpp
   ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   src/audio/Wav.cpp
   src/collision/Collision.cpp
@@ -111,6 +115,7 @@ add_library(spindle_platform STATIC
   src/assets/Downloader.cpp
   src/assets/ControllerDb.cpp
   src/render/Renderer2D.cpp
+  src/render/Textures.cpp
   src/render/DisplaySetup.cpp
   src/input/DeviceRegistry.cpp
   src/input/InputSystem.cpp
@@ -146,6 +151,7 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestLevels.cpp
     tests/TestPlayfield.cpp
     tests/TestPowerups.cpp
+    tests/TestFire.cpp
     tests/TestMatchRules.cpp
     tests/TestMatch.cpp
     tests/TestPlayerManager.cpp

@@ -67,9 +67,18 @@ void App::pumpEvents() {
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             updateLayout();
             break;
-        case SDL_EVENT_RENDER_DEVICE_RESET:
+        case SDL_EVENT_RENDER_DEVICE_RESET: {
+            // Shapes are rebuilt every frame; the one texture has to be created again.
+            std::string err;
+            if (textures_.load(display_.renderer(), &err))
+                log::warn("render: device reset; textures reloaded");
+            else
+                log::warn("render: device reset; {}", err);
+            updateLayout();
+            break;
+        }
         case SDL_EVENT_RENDER_TARGETS_RESET:
-            log::warn("render: device reset; geometry is rebuilt every frame so nothing to reload");
+            log::warn("render: targets reset; geometry is rebuilt every frame so nothing to reload");
             updateLayout();
             break;
         default: input_.handleEvent(e); break;
@@ -159,7 +168,8 @@ void App::render() {
         service_->draw(*renderer_, layout_, clockSeconds_);
     } else {
         const double sub = selftest_ ? 0.0 : static_cast<double>(now > simTimeNs_ ? now - simTimeNs_ : 0) / 1e9;
-        menus::ScreenContext ctx{*renderer_, layout_, *arcade_, clockSeconds_, sub, exitHeld_, static_cast<double>(settings_.arcade.exitHoldSeconds)};
+        menus::ScreenContext ctx{*renderer_, layout_, *arcade_, clockSeconds_, sub, exitHeld_, static_cast<double>(settings_.arcade.exitHoldSeconds),
+                                textures_.flame()};
         menus::drawArcade(ctx);
     }
     renderer_->end();
@@ -174,7 +184,8 @@ bool App::saveScreenshot(const std::filesystem::path& file) {
     if (service_->isOpen()) {
         service_->draw(*renderer_, layout_, clockSeconds_);
     } else {
-        menus::ScreenContext ctx{*renderer_, layout_, *arcade_, clockSeconds_, 0.0, exitHeld_, static_cast<double>(settings_.arcade.exitHoldSeconds)};
+        menus::ScreenContext ctx{*renderer_, layout_, *arcade_, clockSeconds_, 0.0, exitHeld_, static_cast<double>(settings_.arcade.exitHoldSeconds),
+                                textures_.flame()};
         menus::drawArcade(ctx);
     }
     renderer_->end();

@@ -128,6 +128,39 @@ def shield() -> list[float]:
     return mix(burst, ring)
 
 
+def ignite() -> list[float]:
+    # whoosh: noise through a lowpass that opens up, over a rising roar
+    rnd = Noise(41)
+    dur = 0.55
+    out = []
+    low = 0.0
+    for i in range(int(dur * RATE)):
+        t = i / RATE
+        cutoff = 300 + 5200 * min(1.0, t / 0.22)
+        k = 1 - math.exp(-2 * math.pi * cutoff / RATE)
+        low += k * (rnd.next() - low)
+        out.append(low * env(t, dur, attack=0.06, release=0.25, decay=0.35) * 1.6)
+    roar = tone(lambda t: 90 + 260 * min(1.0, t / 0.3), dur, ((1, 0.5), (2, 0.3), (3, 0.15)), attack=0.05, release=0.25, decay=0.3)
+    return mix(out, roar)
+
+
+def burn() -> list[float]:
+    # crackle: a few short, bright noise pops
+    rnd = Noise(57)
+    out: list[float] = []
+    for start, amp in ((0.0, 1.0), (0.035, 0.7), (0.07, 0.85), (0.11, 0.5)):
+        n0 = int(start * RATE)
+        out += [0.0] * max(0, n0 - len(out))
+        pop = [rnd.next() * env(i / RATE, 0.03, attack=0.0004, release=0.01, decay=0.006) * amp for i in range(int(0.03 * RATE))]
+        for i, v in enumerate(pop):
+            if n0 + i < len(out):
+                out[n0 + i] += v
+            else:
+                out.append(v)
+    hiss = tone(lambda t: 1800 - 1200 * t, 0.16, ((1, 0.25), (2.3, 0.12)), attack=0.001, release=0.05, decay=0.05)
+    return mix(out, hiss)
+
+
 def round_start() -> list[float]:
     return tone(lambda t: 880, 0.12, ((1, 1.0), (2, 0.12)), attack=0.004, release=0.05, decay=0.09)
 
@@ -144,6 +177,8 @@ RECIPES = {
     "round_start": round_start,
     "powerup": powerup,
     "shield": shield,
+    "ignite": ignite,
+    "burn": burn,
 }
 
 

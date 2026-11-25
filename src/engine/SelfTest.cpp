@@ -26,6 +26,10 @@ constexpr double kDt = geom::kTickSeconds;
 config::Settings SelfTest::adjustSettings(config::Settings s) {
     s.gameplay.seed = 4242;
     s.gameplay.readyDelay = 0.75;
+    // A shorter fire meter so the scripted match is sure to set someone on fire.
+    s.gameplay.fireMeter = true;
+    s.gameplay.fireCombo = 4;
+    s.gameplay.fireChainWindow = 2.0;
     s.arcade.joinWindow = 3;
     s.arcade.gameOverTime = 3;
     s.display.fullscreen = config::FullscreenMode::Windowed;
@@ -172,8 +176,10 @@ bool SelfTest::oracleWantsFire(int s) const {
     if (!m || m->phase() != gameplay::MatchPhase::Playing || !m->stationInRound(s)) return false;
     const gameplay::Playfield& f = m->field(s);
     if (!f.canFireAt(m->tickCount() + 1) || f.inFlight() > 0) return false;
+    // On fire every needle burns through, so a careful player fires at once.
+    if (f.onFire(m->tickCount() + 1)) return true;
     const auto& cfg = f.config();
-    const double flight = (cfg.launchDistance - cfg.needleLength) / cfg.needleSpeed;
+    const double flight = (cfg.launchDistance - cfg.needleLength) / f.needleSpeed(); // swift flies faster
     const auto& r = m->rotor().state();
     const double look = flight + kDt;
     const double land = collision::wrapAngle(geom::kAttachAngle - (r.angle + r.speed * look + 0.5 * r.accel * look * look));
@@ -376,6 +382,33 @@ void SelfTest::build() {
         return false;
     }, 120);
     shot("15_powerup_rings");
+    waitFor("fire: a careful player chains needles until the circle catches fire", [this, A, M] {
+        const gameplay::Match* m = M();
+        if (A().state() != ArcadeState::Playing || !m) return true;
+        const int r = m->round();
+        drive({P::Spam, r >= 2 ? P::Spam : P::Oracle, r >= 3 ? P::Spam : P::Oracle, P::Oracle});
+        for (int s = 0; s < 4; ++s)
+            if (m->stationInRound(s) && m->field(s).onFire(m->tickCount()) &&
+                m->tickCount() - m->field(s).fireStartTick() >= static_cast<std::uint64_t>(geom::kTickRate / 4))
+                return true;
+        return false;
+    }, 240);
+    add("fire: the burning station shows it", [this, A, M] {
+        const gameplay::Match* m = M();
+        check(A().state() == ArcadeState::Playing && m, "match ended before anyone caught fire");
+        if (m) {
+            int burning = 0, ignitions = 0;
+            for (int s = 0; s < 4; ++s) {
+                if (m->field(s).onFire(m->tickCount())) ++burning;
+                if (m->participant(s)) ignitions += m->participant(s)->ignitions;
+            }
+            check(burning >= 1, "no station on fire");
+            check(ignitions >= 1, "no ignition counted");
+        }
+        (void)this;
+        return true;
+    });
+    shot("16_on_fire");
     waitFor("match: P1, P2, P3 run out of tries in turn; P4 plays on", [this, A, M] {
         const gameplay::Match* m = M();
         if (A().state() != ArcadeState::Playing || !m) return A().state() == ArcadeState::GameOver;
