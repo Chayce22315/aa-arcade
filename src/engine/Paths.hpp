@@ -1,0 +1,32 @@
+#pragma once
+
+#include <filesystem>
+#include <optional>
+#include <string>
+
+namespace spindle {
+
+// Where spindle reads and writes. Portable cabinet layout: everything next to spindle.exe; if that
+// folder is not writable (e.g. Program Files) the writable files move to the user pref path.
+struct Paths {
+    std::filesystem::path base;     // folder of the executable
+    std::filesystem::path writable; // settings, bookkeeping, logs, downloaded controller database
+    bool portable = true;
+
+    std::filesystem::path settings() const { return writable / "settings.ini"; }
+    std::filesystem::path bookkeeping() const { return writable / "bookkeeping.ini"; }
+    std::filesystem::path logFile() const { return writable / "logs" / "spindle.log"; }
+    std::filesystem::path controllerDb() const { return writable / "gamecontrollerdb.txt"; }
+    std::filesystem::path screenshots() const { return writable / "screenshots"; }
+    // Optional operator overrides of the embedded scripts.
+    std::filesystem::path levelScriptOverride() const { return base / "data" / "scripts" / "levels.lua"; }
+    std::filesystem::path botScriptOverride() const { return base / "data" / "scripts" / "bots" / "bot.lua"; }
+};
+
+// root, when given, replaces both folders (used by --root and the self-test).
+Paths resolvePaths(const std::optional<std::filesystem::path>& root);
+
+std::filesystem::path pathFromUtf8(const char* utf8);
+std::string pathToUtf8(const std::filesystem::path& p);
+
+} // namespace spindle

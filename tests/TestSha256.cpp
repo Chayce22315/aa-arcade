@@ -31,3 +31,15 @@ TEST_CASE(sha256_padding_boundaries) {
     CHECK(sha256Hex(std::string(55, 'x')) != sha256Hex(std::string(56, 'x')));
     CHECK_EQ(sha256Hex(std::string(64, 'a')), std::string("ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"));
 }
+
+#include "assets/ControllerDbPin.hpp"
+
+TEST_CASE(controller_db_pin_rejects_anything_else) {
+    namespace pin = spindle::assets::controller_db_pin;
+    CHECK(!pin::matches(""));
+    CHECK(!pin::matches(std::string(static_cast<std::size_t>(pin::kSizeBytes), 'x')));
+    CHECK_EQ(pin::kSha256.size(), std::size_t{64});
+    CHECK_EQ(pin::kCommit.size(), std::size_t{40});
+    CHECK(pin::kUrl.find(pin::kCommit) != std::string_view::npos);
+    CHECK(pin::kUrl.substr(0, 8) == "https://");
+}

@@ -181,7 +181,12 @@ Glyph make(char c) {
     case '<': b.poly({{3, 1.4f}, {0, 3.4f}, {3, 5.4f}}); break;
     case '>': b.poly({{0, 1.4f}, {3, 3.4f}, {0, 5.4f}}); break;
     case '|': b.line(0, -0.5f, 0, 6.5f); break;
-    case '&': b.arc(1.6f, 1.4f, 1.3f, 1.3f, 30, 330).to(4, 6); break;
+    case '&':
+        // Small top loop, a long diagonal to the bottom right, and an open lower bowl with a short tail.
+        b.arc(1.7f, 1.35f, 1.05f, 1.2f, 0, 360);
+        b.line(1.0f, 2.3f, 4.3f, 6.0f);
+        b.arc(1.9f, 4.55f, 1.85f, 1.45f, 245, 25).to(4.4f, 3.6f);
+        break;
     case '@': b.arc(3, 3.4f, 3, 3, 30, 340).arc(3, 3.4f, 1.2f, 1.2f, 0, 360); break;
     case '$': b.arc(2, 1.8f, 1.9f, 1.2f, 330, 90).arcTo(2, 4.2f, 2, 1.2f, 270, 510).line(2, -0.4f, 2, 6.4f); break;
     case '^': b.poly({{0, 2}, {1.5f, 0}, {3, 2}}); break;

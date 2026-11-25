@@ -53,6 +53,7 @@ public:
     FieldStatus status() const { return status_; }
     FailReason failReason() const { return failReason_; }
     std::uint64_t failTick() const { return failTick_; }
+    std::uint64_t clearTick() const { return clearTick_; }
     int placed() const { return placed_; }          // needles this player placed this round
     int needlesLeft() const { return queue_; }      // not yet launched
     int inFlight() const { return static_cast<int>(flying_.size()); }
@@ -73,6 +74,7 @@ private:
     FieldStatus status_ = FieldStatus::Idle;
     FailReason failReason_ = FailReason::None;
     std::uint64_t failTick_ = 0;
+    std::uint64_t clearTick_ = 0;
     std::vector<AttachedNeedle> attached_;
     std::vector<double> angles_; // mirror of attached_[i].angle for the collision functions
     std::vector<FlyingNeedle> flying_;

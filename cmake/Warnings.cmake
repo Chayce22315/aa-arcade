@@ -7,7 +7,7 @@ function(spindle_set_warnings target)
     endif()
   else()
     target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion
-      -Wnon-virtual-dtor -Wold-style-cast -Wnull-dereference -Wdouble-promotion)
+      -Wnon-virtual-dtor -Wold-style-cast -Wdouble-promotion)
     if(WIN32)
       target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     endif()

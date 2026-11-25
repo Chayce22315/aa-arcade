@@ -99,7 +99,10 @@ void Playfield::step(std::uint64_t tick, double dt, double angleBefore, double a
             }
         }
     }
-    if (queue_ == 0 && flying_.empty()) status_ = FieldStatus::Cleared;
+    if (queue_ == 0 && flying_.empty()) {
+        status_ = FieldStatus::Cleared;
+        clearTick_ = tick;
+    }
 }
 
 } // namespace spindle::gameplay

@@ -175,3 +175,18 @@ TEST_CASE(rules_never_produce_two_winners) {
         }
     }
 }
+
+TEST_CASE(rules_T11_match_totals_settle_endless_ties) {
+    {
+        const std::vector<MatchTotals> totals{{0, 12, 2}, {1, 15, 1}, {3, 15, 0}};
+        RoundDecision d = matchTotalsTieBreak(totals);
+        CHECK(d.kind == DecisionKind::Winner);
+        CHECK_EQ(d.winner, 1); // most needles, then most rounds cleared
+        CHECK(d.rule == RuleCase::T11);
+    }
+    {
+        const std::vector<MatchTotals> totals{{3, 0, 0}, {1, 0, 0}, {2, 0, 0}};
+        CHECK_EQ(matchTotalsTieBreak(totals).winner, 1); // all equal: lowest station
+    }
+    CHECK_EQ(kMaxTiedSuddenDeaths, 3);
+}

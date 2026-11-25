@@ -1,2 +1,78 @@
-# aa-arcade
-arcade version for AA
+# spindle
+
+**spindle** is a native Windows software arcade machine: a four-station battle game in the
+rotating-circle needle genre. Each station has its own circle; all four circles turn with one shared
+rotation, every surviving player gets the same round at the same moment, and the last player standing
+wins. Black background, white circles, white needles, nothing else.
+
+The repository is called `aa-arcade`; the game is **spindle**. spindle is an original game inspired by
+the minimalist needle-and-circle genre. It uses its own title, typography, sounds and level designs,
+contains no assets from any other game, and is not affiliated with or endorsed by the makers of aa,
+aa2 or any other title.
+
+## What is in the box
+
+- **Real arcade-machine behaviour**: actual initialization (no fake boot screen), attract mode with a
+  live bot demo, virtual coins and credits, joining, a service/test menu, game over, back to attract.
+  No desktop main menu, no player pause menu, no quit item.
+- **Four stations** in fixed screen columns. One human is singleplayer, two or more is multiplayer, and
+  bots (Lua, sandboxed, same rules as humans) can fill free stations in either mode.
+- **Input**: built-in, USB and Bluetooth keyboards (optionally one keyboard per station), Xbox,
+  PlayStation and generic controllers through SDL3, unmapped joysticks as a fallback, hotplug,
+  automatic or fixed assignment, and pause-and-reconnect on disconnect.
+- **Everything procedural or embedded**: circles, needles, text (a built-in stroke font) and menus are
+  drawn by code. Sounds and Lua scripts are compiled into `spindle.exe`. The only download is the
+  optional community controller database, pinned by SHA-256.
+- **settings.ini** with commented defaults, validation and an operator service menu (F2).
+
+## Default controls
+
+| Action | P1 | P2 | P3 | P4 |
+|---|---|---|---|---|
+| Fire | Left Ctrl | A | Right Ctrl | L |
+| Start / join | 1 | 2 | 3 | 4 |
+
+Coin `5`, service coin `9`, service menu `F2`, hold `Escape` (2 s) to quit. Controllers: any face
+button or shoulder fires, Start joins, Back inserts a coin. All of it is configurable in
+`settings.ini` or in the service menu.
+
+## Files next to spindle.exe
+
+| File | Purpose |
+|---|---|
+| `settings.ini` | operator settings, created with comments on first start ([docs/SETTINGS.md](docs/SETTINGS.md)) |
+| `bookkeeping.ini` | coin and game counters, recent winners |
+| `logs/spindle.log` | boot steps, warnings and errors |
+| `gamecontrollerdb.txt` | optional, downloaded and verified automatically |
+
+If that folder is not writable (for example under Program Files), these move to the user's
+application data folder (`%APPDATA%\spindle\spindle\`).
+
+## Building
+
+Windows, Visual Studio 2022, CMake 3.25+:
+
+```
+cmake --preset msvc-x64-release
+cmake --build --preset msvc-x64-release
+build\msvc-x64\Release\spindle_tests.exe
+build\msvc-x64\Release\spindle.exe
+```
+
+The executable is fully static (SDL3, Lua and the C runtime are linked in), so `spindle.exe` alone is
+the game. See [docs/BUILDING.md](docs/BUILDING.md) for MinGW cross-compiling, Linux development builds,
+the headless self-test and the developer tools.
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): modules, data flow, timing
+- [docs/RULES.md](docs/RULES.md): modes, rounds, tries, elimination and every tie-break case
+- [docs/SETTINGS.md](docs/SETTINGS.md): every `settings.ini` key
+- [docs/SERVICE_MENU.md](docs/SERVICE_MENU.md): the operator menu
+- [docs/DECISIONS.md](docs/DECISIONS.md): engineering decisions and their reasons
+- [docs/BUILDING.md](docs/BUILDING.md): toolchains, tests, tools, CI
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). Bundled: Lua 5.4.7 (MIT, `third_party/lua-5.4.7/LICENSE`). Fetched at
+build time: SDL 3.4.20 (zlib licence).
