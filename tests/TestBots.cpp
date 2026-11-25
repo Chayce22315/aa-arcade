@@ -1,0 +1,102 @@
+#include <memory>
+
+#include "Test.hpp"
+#include "bots/BotController.hpp"
+#include "gameplay/LevelScript.hpp"
+#include "gameplay/Geometry.hpp"
+#include "gameplay/Match.hpp"
+
+using namespace spindle;
+
+namespace {
+
+std::unique_ptr<bots::BotController> makeBot(config::Difficulty d, std::uint64_t seed) {
+    std::string err;
+    auto brain = bots::BotBrain::create(bots::BotBrain::embeddedSource(), d, seed, &err);
+    if (!brain) {
+        test::fail(__FILE__, __LINE__, "bot create failed: " + err);
+        return nullptr;
+    }
+    return std::make_unique<bots::BotController>(std::move(brain));
+}
+
+struct BotMatchResult {
+    int winner = -1;
+    int rounds = 0;
+};
+
+BotMatchResult playBots(const std::array<config::Difficulty, 4>& diff, std::uint32_t seed, int seats = 4) {
+    gameplay::LevelScript levels;
+    gameplay::MatchConfig c;
+    c.seed = seed;
+    c.tries = 3;
+    std::vector<gameplay::ParticipantSpec> specs;
+    std::array<std::unique_ptr<bots::BotController>, 4> bots;
+    for (int s = 0; s < seats; ++s) {
+        specs.push_back({s, gameplay::ParticipantKind::Bot});
+        bots[static_cast<std::size_t>(s)] = makeBot(diff[static_cast<std::size_t>(s)], seed * 31u + static_cast<std::uint32_t>(s));
+    }
+    gameplay::Match m(c, specs, levels);
+    for (int i = 0; i < 1200 * gameplay::geom::kTickRate && !m.over(); ++i) {
+        std::array<int, 4> fire{};
+        if (m.phase() == gameplay::MatchPhase::Playing)
+            for (int s = 0; s < seats; ++s)
+                if (bots[static_cast<std::size_t>(s)] && m.stationInRound(s))
+                    fire[static_cast<std::size_t>(s)] =
+                        bots[static_cast<std::size_t>(s)]->think(m.rotor().state(), m.field(s), m.roundTime(), m.tickCount() + 1);
+        m.tick(fire);
+        for (const auto& e : m.takeEvents())
+            if (e.type == gameplay::MatchEventType::RoundStarted)
+                for (auto& b : bots)
+                    if (b) b->beginRound();
+    }
+    return {m.over() ? m.winnerStation() : -2, m.round()};
+}
+
+} // namespace
+
+TEST_CASE(bots_load_every_profile_with_enforced_reaction) {
+    for (auto d : {config::Difficulty::Easy, config::Difficulty::Normal, config::Difficulty::Hard, config::Difficulty::Expert}) {
+        auto bot = makeBot(d, 1);
+        REQUIRE(bot != nullptr);
+        CHECK(bot->brain().profile().reaction > 0.0);
+        CHECK(bot->delayTicks() > 0);
+        CHECK(!bot->brain().disabled());
+    }
+    auto easy = makeBot(config::Difficulty::Easy, 1);
+    auto expert = makeBot(config::Difficulty::Expert, 1);
+    CHECK(easy->delayTicks() > expert->delayTicks());
+}
+
+TEST_CASE(bots_matches_end_with_exactly_one_winner_at_every_difficulty) {
+    using D = config::Difficulty;
+    for (D d : {D::Easy, D::Normal, D::Hard, D::Expert}) {
+        const BotMatchResult r = playBots({d, d, d, d}, 11u + static_cast<std::uint32_t>(d));
+        CHECK(r.winner >= 0 && r.winner < 4);
+        CHECK(r.rounds >= 1);
+    }
+}
+
+TEST_CASE(bots_better_profiles_survive_longer_on_average) {
+    using D = config::Difficulty;
+    int expertWins = 0;
+    for (std::uint32_t seed = 1; seed <= 6; ++seed) {
+        const BotMatchResult r = playBots({D::Easy, D::Expert, D::Easy, D::Easy}, seed);
+        if (r.winner == 1) ++expertWins;
+    }
+    CHECK(expertWins >= 4);
+}
+
+TEST_CASE(bots_broken_script_is_rejected_or_disabled) {
+    std::string err;
+    CHECK(bots::BotBrain::create({"x = ", "test:syntax"}, config::Difficulty::Normal, 1, &err) == nullptr);
+    CHECK(bots::BotBrain::create({"function decide() return true end", "test:noprofiles"}, config::Difficulty::Normal, 1, &err) == nullptr);
+    CHECK(bots::BotBrain::create({"profiles = { normal = { reaction = 9 } } function decide() return true end", "test:reaction"},
+                                 config::Difficulty::Normal, 1, &err) == nullptr);
+    auto brain = bots::BotBrain::create({"profiles = { normal = { reaction = 0.1 } } function decide() while true do end end", "test:spin"},
+                                        config::Difficulty::Normal, 1, &err);
+    REQUIRE(brain != nullptr);
+    bots::BotView v;
+    for (int i = 0; i < 25; ++i) CHECK(!brain->decide(v));
+    CHECK(brain->disabled());
+}

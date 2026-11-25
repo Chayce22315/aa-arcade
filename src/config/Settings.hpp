@@ -1,0 +1,162 @@
+#pragma once
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "config/IniDocument.hpp"
+
+namespace spindle::config {
+
+enum class FullscreenMode { Borderless, Exclusive, Windowed };
+enum class Difficulty { Easy, Normal, Hard, Expert };
+enum class AssignmentMode { Auto, Fixed };
+enum class DisconnectAction { Pause, Continue };
+enum class LogLevelSetting { Error, Warn, Info, Debug };
+
+struct Resolution {
+    bool automatic = true;
+    int width = 0;
+    int height = 0;
+    bool operator==(const Resolution&) const = default;
+};
+
+inline constexpr int kStationCount = 4;
+
+struct StationKeys {
+    std::string fire;
+    std::string start;
+    bool operator==(const StationKeys&) const = default;
+};
+
+struct Settings {
+    struct Display {
+        Resolution resolution{};
+        FullscreenMode fullscreen = FullscreenMode::Borderless;
+        bool vsync = true;
+        int displayIndex = 0;
+        int maxFps = 0;
+        bool operator==(const Display&) const = default;
+    } display;
+
+    struct Audio {
+        int masterVolume = 80;
+        int sfxVolume = 100;
+        int uiVolume = 80;
+        bool attractSound = true;
+        bool operator==(const Audio&) const = default;
+    } audio;
+
+    struct Gameplay {
+        int tries = 3;
+        int roundTimeLimit = 45;
+        double rotationSpeedScale = 1.0;
+        double needleSpeedScale = 1.0;
+        double readyDelay = 1.5;
+        int startRound = 1;
+        std::uint32_t seed = 0;
+        bool operator==(const Gameplay&) const = default;
+    } gameplay;
+
+    struct Bots {
+        int singleplayerBots = 3;
+        int multiplayerBots = 0;
+        Difficulty difficulty = Difficulty::Normal;
+        Difficulty demoDifficulty = Difficulty::Hard;
+        bool operator==(const Bots&) const = default;
+    } bots;
+
+    struct Arcade {
+        bool freePlay = false;
+        int creditsPerCoin = 1;
+        int creditsPerGame = 1;
+        int maxCredits = 99;
+        int joinWindow = 10;
+        int gameOverTime = 8;
+        int exitHoldSeconds = 2;
+        bool operator==(const Arcade&) const = default;
+    } arcade;
+
+    std::array<StationKeys, kStationCount> stationKeys{{{"LCtrl", "1"}, {"A", "2"}, {"RCtrl", "3"}, {"L", "4"}}};
+
+    struct SystemKeys {
+        std::string coin = "5";
+        std::string serviceCoin = "9";
+        std::string service = "F2";
+        std::string exit = "Escape";
+        std::string menuUp = "Up";
+        std::string menuDown = "Down";
+        std::string menuLeft = "Left";
+        std::string menuRight = "Right";
+        std::string menuSelect = "Return";
+        std::string menuBack = "Backspace";
+        bool operator==(const SystemKeys&) const = default;
+    } systemKeys;
+
+    struct Input {
+        AssignmentMode assignment = AssignmentMode::Auto;
+        bool perKeyboard = false;
+        DisconnectAction disconnectAction = DisconnectAction::Pause;
+        std::string gamepadFire = "a,b,x,y,leftshoulder,rightshoulder";
+        std::string gamepadStart = "start";
+        std::string gamepadCoin = "back";
+        std::array<std::string, kStationCount> gamepadGuid{};
+        std::array<std::string, kStationCount> keyboardName{};
+        bool operator==(const Input&) const = default;
+    } input;
+
+    struct Assets {
+        bool download = true;
+        std::string controllerDbUrl; // filled from the compiled-in pin by defaults()
+        int downloadTimeout = 10;
+        bool operator==(const Assets&) const = default;
+    } assets;
+
+    struct System {
+        LogLevelSetting logLevel = LogLevelSetting::Info;
+        bool operator==(const System&) const = default;
+    } system;
+
+    static Settings defaults();
+    bool operator==(const Settings&) const = default;
+};
+
+enum class IssueKind { Missing, Invalid };
+
+struct SettingIssue {
+    IssueKind kind = IssueKind::Invalid;
+    std::string section;
+    std::string key;
+    std::string value;
+    std::string message;
+};
+
+struct LoadedSettings {
+    Settings settings;
+    std::vector<SettingIssue> issues;
+    std::size_t invalidCount() const;
+};
+
+// Reads every schema key from the document; anything missing, unparsable or out of range keeps its
+// default and is reported. Never modifies the document.
+LoadedSettings loadSettings(const IniDocument& doc);
+
+// Writes all values into the document, keeping existing comments and order.
+void storeSettings(const Settings& settings, IniDocument& doc);
+
+// A complete, commented settings.ini with default values.
+std::string defaultSettingsText();
+
+std::string_view difficultyName(Difficulty d);
+std::optional<Difficulty> parseDifficulty(std::string_view s);
+std::string formatResolution(const Resolution& r);
+std::optional<Resolution> parseResolution(std::string_view s);
+std::optional<bool> parseBool(std::string_view s);
+
+// Splits "a, b ,c" into trimmed non-empty tokens.
+std::vector<std::string> splitList(std::string_view s);
+
+} // namespace spindle::config

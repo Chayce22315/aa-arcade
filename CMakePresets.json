@@ -1,0 +1,34 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "msvc-x64-release",
+      "displayName": "Windows x64 Release (MSVC)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/msvc-x64",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Debug (development and headless tests)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "mingw-x64-release",
+      "displayName": "Windows x64 Release cross-compiled with MinGW-w64",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/mingw-x64",
+      "toolchainFile": "${sourceDir}/cmake/toolchain-mingw64.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "msvc-x64-release", "configurePreset": "msvc-x64-release", "configuration": "Release" },
+    { "name": "linux-debug", "configurePreset": "linux-debug" },
+    { "name": "mingw-x64-release", "configurePreset": "mingw-x64-release" }
+  ]
+}
