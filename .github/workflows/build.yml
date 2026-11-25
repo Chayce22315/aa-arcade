@@ -31,6 +31,14 @@ jobs:
       - name: Four-station self-test (headless)
         run: python tools/run_selftest.py build\msvc-x64\Release\spindle.exe --out selftest-run
 
+      - name: Boot log from the self-test
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path selftest-run\logs\spindle.log) {
+            Get-Content selftest-run\logs\spindle.log | Select-String -Pattern 'boot |deps:|assets:|display:|audio:|warn|error' | Select-Object -First 60
+          }
+
       - name: Package
         if: success()
         shell: pwsh
