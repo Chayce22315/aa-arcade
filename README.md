@@ -50,7 +50,7 @@ application data folder (`%APPDATA%\spindle\spindle\`).
 
 ## Building
 
-Windows, Visual Studio 2022, CMake 3.25+:
+Windows, Visual Studio 2022 or newer, CMake 3.25+:
 
 ```
 cmake --preset msvc-x64-release

@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <format>
+#include <iterator>
 
 #if defined(_WIN32)
 #include <windows.h>

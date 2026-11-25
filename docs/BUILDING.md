@@ -5,7 +5,7 @@ and network access at configure time to fetch SDL 3.4.20 (or a local copy, see b
 
 ## Windows (MSVC, the reference build)
 
-Visual Studio 2022 with the "Desktop development with C++" workload:
+Visual Studio 2022 or newer with the "Desktop development with C++" workload (the preset uses the newest Visual Studio generator CMake finds):
 
 ```
 cmake --preset msvc-x64-release
