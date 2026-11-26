@@ -249,6 +249,9 @@ On a phone or tablet the screen is the cabinet: the four stations are its four c
 - **One player** (usually a phone against bots): tap anywhere to fire.
 - **Several players** (around a tablet): each player taps their own column; taps on a bot's column do
   nothing. Every finger counts on its own, so players can tap at the same time.
+- **Pause:** in a match with one human, a pause button sits in the top-right corner; tapping it pauses
+  like leaving the app does.
+- **Options:** the gear in the top-right corner of attract opens the player options.
 - **Leaving the app** (home button, a call) pauses a running match; it shows `paused` and continues when
   a player taps (that tap does not launch a needle). Rules, timers and tie-breaks are unchanged.
 - **Initials:** a column shooting initials splits into thirds: tap the left third for the previous

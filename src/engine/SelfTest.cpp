@@ -309,8 +309,10 @@ void SelfTest::build() {
 
     // --- attract mode
     waitFor("attract: title page", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::Title; }, 5);
+    add("let the screen open (01_attract_title)", settle(1.6)); // the iris and any intro animation
     shot("01_attract_title");
     waitFor("attract: how-to page", [A] { return A().attractPage() == AttractPage::HowTo; }, 12);
+    add("let the screen open (02_attract_howto)", settle(0.8)); // the iris and any intro animation
     shot("02_attract_howto");
     waitFor("attract: bot demo playing", [A, M] {
         return A().attractPage() == AttractPage::Demo && M() && M()->phase() == gameplay::MatchPhase::Playing && M()->roundTime() > 0.8;
@@ -327,6 +329,7 @@ void SelfTest::build() {
     // --- coins and four-station join through four different device types
     add("coin: insert 4 coins with the coin key", taps(SDL_SCANCODE_5, 4));
     waitFor("coin: insert-coin screen shows 4 credits", [A] { return A().state() == ArcadeState::InsertCoin && A().credits().credits() == 4; });
+    add("let the screen open (04_insert_coin)", settle(0.5)); // the iris and any intro animation
     shot("04_insert_coin");
     add("controllers: attach xbox pad, playstation pad, arcade stick", once([this] {
         attachPad(1, 0x045e, 0x0b13, "selftest xbox pad");
@@ -546,6 +549,7 @@ void SelfTest::build() {
         (void)this;
         return true;
     });
+    add("let the screen open (08_game_over)", settle(0.6)); // the iris and any intro animation
     shot("08_game_over");
     waitFor("game over: back to attract with no credits", [A] { return A().state() == ArcadeState::Attract; }, 10);
     waitFor("attract: the high score page comes round", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::HighScores; },
@@ -655,6 +659,7 @@ void SelfTest::build() {
         (void)this;
         return true;
     });
+    add("let the screen open (13_solo_game_over)", settle(0.6)); // the iris and any intro animation
     shot("13_solo_game_over");
     waitFor("solo: back to attract", [A] { return A().state() == ArcadeState::Attract; }, 10);
 

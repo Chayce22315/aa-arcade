@@ -24,6 +24,8 @@ const char* actionName(Action a) {
     case Action::MenuRight: return "menu right";
     case Action::MenuSelect: return "menu select";
     case Action::MenuBack: return "menu back";
+    case Action::Options: return "options";
+    case Action::Pause: return "pause";
     case Action::Count: break;
     }
     return "?";

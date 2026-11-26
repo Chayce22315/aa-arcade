@@ -46,6 +46,9 @@ public:
 
     // byTouch: opened from the hidden corner, so show the touch controls even on a cabinet.
     void open(bool byTouch = false);
+    // Phones: the player options behind the gear on attract (volumes and accessibility only).
+    void openPlayerOptions();
+    bool playerOptions() const { return playerMode_; }
     bool isOpen() const { return open_; }
     void update(const input::TickInput& in, double dt);
     // Same as the back key: leaves a sub page; on the main page moves to "save & exit".
@@ -63,7 +66,7 @@ public:
     std::optional<render::Vec2> rowPoint(int index) const;
 
 private:
-    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores };
+    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores, PlayerOptions };
     enum class Capture { None, Key, Controller, Keyboard };
 
     void show(PageId id);
@@ -105,7 +108,8 @@ private:
     std::string captureLabel_;
     double captureTime_ = 0.0;
     std::string pendingConfirm_;
-    bool rebuildPending_ = false; // rebuild the page on the next update (never from inside one of its items)
+    bool rebuildPending_ = false;
+    bool playerMode_ = false; // opened from the phone gear: one page, leaving saves // rebuild the page on the next update (never from inside one of its items)
     double confirmTime_ = 0.0;
     double backHeld_ = 0.0;
     std::string notice_;

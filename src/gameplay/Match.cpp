@@ -239,6 +239,7 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
             p->roundPoints += scoring::placementPoints(pl, round_);
             if (!pl.closeCall) continue;
             ++p->closeCalls;
+            p->closeCallTick = tick_;
             // Sabotage: every third close call in a round sends junk to the rivals.
             if (config_.mode.junk && !suddenDeath_ && ++closeCallsThisRound_[static_cast<std::size_t>(s)] % kCloseCallsPerJunk == 0)
                 sendJunk(s, 1);
@@ -341,6 +342,7 @@ void Match::applyDecision(const RoundDecision& d) {
     for (int id : d.lostTry) {
         auto& p = participants_[static_cast<std::size_t>(id)];
         p->tries = std::max(0, p->tries - 1);
+        p->tryLostTick = tick_;
         emit(MatchEventType::TryLost, id, p->tries);
     }
     if (config_.mode.teams)

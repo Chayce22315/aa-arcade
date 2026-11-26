@@ -21,6 +21,8 @@ enum class Action {
     MenuRight,
     MenuSelect,
     MenuBack,
+    Options, // phones: the gear on attract opens the player options
+    Pause,   // phones: the pause button during a solo match
     Count
 };
 

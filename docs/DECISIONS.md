@@ -177,3 +177,9 @@ with their own tests; the wheel's spin is drawn from the same function the tests
 the clock rules (5 s once everyone voted, a late joiner pushes it back to 5 s) keep it short without
 locking anyone out. Votes, ties and the wheel are deterministic for a seed, so they are tested like
 the rules.
+
+**Screen feedback never touches the shared circle.** A fail shakes only the failing column (that player
+is done for the round), the clear burst, close-call pop and try pip are drawn from match state the core
+already keeps (`tryLostTick`, `closeCallTick`), and the iris between screens is purely drawn. Small text
+has a minimum size and is bumped up on phones; overlay text sits on a scrim. "Reduce flashes" softens
+the fail flash and turns the shakes and sparks off; "player colours" tints each station.

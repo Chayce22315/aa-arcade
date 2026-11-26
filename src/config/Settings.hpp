@@ -132,6 +132,12 @@ struct Settings {
         bool operator==(const Assets&) const = default;
     } assets;
 
+    struct Accessibility {
+        bool accentColors = false; // each station gets its own colour
+        bool reduceFlashes = false; // softer fail flashes, no shaking
+        bool operator==(const Accessibility&) const = default;
+    } accessibility;
+
     struct System {
         LogLevelSetting logLevel = LogLevelSetting::Info;
         bool operator==(const System&) const = default;

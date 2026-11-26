@@ -92,8 +92,11 @@ input::TouchContext App::touchContext() const {
             const bool stillIn = m && m->participant(s) && !m->participant(s)->eliminated && !m->over();
             c.humans[i] = human && stillIn && arcade_->state() == arcade::ArcadeState::Playing;
         }
+        c.pause = touchUi() && arcade_->state() == arcade::ArcadeState::Playing && !arcade_->suspended() &&
+                  std::count(c.humans.begin(), c.humans.end(), true) == 1;
     } else {
         c.screen = input::TouchScreen::Lobby;
+        c.gear = touchUi() && (arcade_->state() == arcade::ArcadeState::Attract || arcade_->state() == arcade::ArcadeState::InsertCoin);
         // On the vote screen a joined column picks and votes (with one mode on, a tap simply starts).
         if (arcade_->state() == arcade::ArcadeState::Vote && arcade_->votePhase() == arcade::VotePhase::Voting && arcade_->vote().modes().size() > 1)
             for (std::size_t i = 0; i < 4; ++i) c.voting[i] = arcade_->vote().joined(static_cast<int>(i));
@@ -240,7 +243,11 @@ void App::tick(std::uint64_t tickEndNs) {
         if (in.systemPressed[static_cast<std::size_t>(input::Action::Service)]) {
             service_->open(in.serviceByTouch);
             audio_.play(audio::SoundId::MenuSelect);
+        } else if (in.systemPressed[static_cast<std::size_t>(input::Action::Options)]) {
+            service_->openPlayerOptions();
+            audio_.play(audio::SoundId::MenuSelect);
         } else {
+            if (in.systemPressed[static_cast<std::size_t>(input::Action::Pause)]) arcade_->suspend();
             arcade_->tick(in.arcade);
         }
     }

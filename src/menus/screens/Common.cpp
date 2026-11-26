@@ -11,8 +11,38 @@ bool blink(double t, double period) { return std::fmod(t, period) < period * 0.6
 
 float px(const ScreenContext& c, float ref) { return ref * c.layout.scale; }
 
+float capPx(const ScreenContext& c, float refCap) {
+    float cap = px(c, refCap);
+    if (c.touchUi && refCap < 24.0f) cap *= 1.25f; // phones: small text is read at arm's length
+    return std::max(cap, std::min(kMinCapPx, px(c, refCap) * 3.0f));
+}
+
 void textAt(const ScreenContext& c, std::string_view s, float x, float y, float cap, Color col, Align a) {
-    c.r.text(s, {x, y}, px(c, cap), col, a);
+    c.r.text(s, {x, y}, capPx(c, cap), col, a);
+}
+
+void scrim(const ScreenContext& c, float alpha) { c.r.fillRect({0, 0, c.layout.width, c.layout.height}, colors::kBlack.withAlpha(alpha)); }
+
+void band(const ScreenContext& c, float yRef, float hRef, float alpha) {
+    c.r.fillRect({0, areaY(c, yRef), c.layout.width, px(c, hRef)}, colors::kBlack.withAlpha(alpha));
+}
+
+Color stationColor(const ScreenContext& c, int s) {
+    if (!c.arcade.settings().accessibility.accentColors) return colors::kWhite;
+    constexpr Color kAccents[4] = {{0.35f, 0.85f, 1.0f, 1.0f}, {1.0f, 0.45f, 0.8f, 1.0f}, {0.5f, 1.0f, 0.45f, 1.0f}, {1.0f, 0.65f, 0.25f, 1.0f}};
+    return kAccents[static_cast<std::size_t>(std::clamp(s, 0, 3))];
+}
+
+bool reduceFlashes(const ScreenContext& c) { return c.arcade.settings().accessibility.reduceFlashes; }
+
+void drawIris(const ScreenContext& c, float t) {
+    if (t >= 1.0f) return;
+    const Vec2 o{c.layout.width * 0.5f, c.layout.height * 0.5f};
+    const float full = std::hypot(c.layout.width, c.layout.height) * 0.5f + 4.0f;
+    const float hole = full * easeOut(t);
+    const float outer = full + 8.0f;
+    c.r.ring(o, (hole + outer) * 0.5f, outer - hole, colors::kBlack);
+    if (hole > 1.0f) c.r.ring(o, hole, std::max(1.5f, px(c, 3.0f)), colors::kWhite.withAlpha(1.0f - t));
 }
 
 float midX(const ScreenContext& c) { return c.layout.area.x + c.layout.area.w * 0.5f; }
@@ -26,7 +56,7 @@ const char* startPrompt(const ScreenContext& c) {
 void creditLine(const ScreenContext& c) {
     const auto& credits = c.arcade.credits();
     const std::string s = credits.freePlay() ? std::string("FREE PLAY") : std::format("CREDIT {}", credits.credits());
-    textAt(c, s, midX(c), areaY(c, 1040), 16, colors::kDim);
+    textAt(c, s, midX(c), areaY(c, 1036), 18, colors::kDim);
 }
 
 void dividers(const ScreenContext& c) {
@@ -211,8 +241,10 @@ void decorativeCircle(const ScreenContext& c, Vec2 centre, float scale, double t
 
 void drawStationHeader(const ScreenContext& c, int s, std::string_view kind, Color col) {
     const Rect& r = c.layout.columns[static_cast<std::size_t>(s)];
-    c.r.text(std::format("P{}", s + 1), {r.x + px(c, 40), r.y + px(c, 72)}, px(c, 30), col);
-    c.r.text(kind, {r.x + px(c, 40), r.y + px(c, 114)}, px(c, 13), colors::kDim);
+    const bool white = col.r >= 0.999f && col.g >= 0.999f && col.b >= 0.999f;
+    const Color accent = white ? stationColor(c, s).withAlpha(col.a) : col;
+    c.r.text(std::format("P{}", s + 1), {r.x + px(c, 40), r.y + px(c, 72)}, px(c, 30), accent);
+    c.r.text(kind, {r.x + px(c, 40), r.y + px(c, 112)}, capPx(c, 16), colors::kDim);
 }
 
 void drawStationStatus(const ScreenContext& c, int s, std::string_view text, Color col, float cap) {

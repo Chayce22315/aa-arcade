@@ -38,7 +38,7 @@ void drawModeBanner(const ScreenContext& c, const gameplay::Match& m, bool demo)
         const double left = m.clockLeft();
         textAt(c, clockText(left), cx, areaY(c, 6), 30, left <= 10.0 ? kMissRed : colors::kWhite);
     } else {
-        textAt(c, line, cx, areaY(c, 22), m.suddenDeath() ? 20 : 15, m.suddenDeath() ? colors::kWhite : colors::kDim);
+        textAt(c, line, cx, areaY(c, 22), m.suddenDeath() ? 20.0f : 15.0f, m.suddenDeath() ? colors::kWhite : colors::kDim);
     }
     if (m.phase() == gameplay::MatchPhase::Playing && m.mutator() != gameplay::Mutator::None)
         textAt(c, gameplay::mutatorName(m.mutator()), cx, areaY(c, 44), 14, kGold.withAlpha(0.7f));
@@ -98,9 +98,9 @@ void drawFireMeter(const ScreenContext& c, int s, const gameplay::Playfield& f, 
         if (fill > 0.0) c.r.fillCircle({base.x, base.y - h * 0.45f}, w * 0.42f * static_cast<float>(fill), kFire);
     }
     if (burning) {
-        c.r.text("fire", {base.x + px(c, 34), base.y - px(c, 52)}, px(c, 18), kFire);
+        c.r.text("fire", {base.x + px(c, 34), base.y - px(c, 56)}, capPx(c, 22), kFire);
     } else if (f.combo() > 0) {
-        c.r.text(std::format("x{}", f.combo()), {base.x + px(c, 34), base.y - px(c, 52)}, px(c, 18), colors::kWhite);
+        c.r.text(std::format("x{}", f.combo()), {base.x + px(c, 34), base.y - px(c, 56)}, capPx(c, 22), colors::kWhite);
         // The chain: a bar that runs out if the next needle is too slow.
         const int left = f.chainTicksLeft(now);
         const int window = std::max(1, f.config().chainWindowTicks);
@@ -109,9 +109,16 @@ void drawFireMeter(const ScreenContext& c, int s, const gameplay::Playfield& f, 
     }
 }
 
-void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const StationLook& look) {
+// An X over a ball that touched (so a fail never relies on red alone).
+void cross(const ScreenContext& c, Vec2 p, float r) {
+    const float k = r * 0.62f, t = std::max(1.5f, r * 0.28f);
+    c.r.line({p.x - k, p.y - k}, {p.x + k, p.y + k}, t, colors::kBlack);
+    c.r.line({p.x - k, p.y + k}, {p.x + k, p.y - k}, t, colors::kBlack);
+}
+
+void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const StationLook& look, Vec2 shake) {
     const gameplay::Playfield& f = m.field(s);
-    const Vec2 centre = c.layout.circleCenter[static_cast<std::size_t>(s)];
+    const Vec2 centre{c.layout.circleCenter[static_cast<std::size_t>(s)].x + shake.x, c.layout.circleCenter[static_cast<std::size_t>(s)].y + shake.y};
     const auto& rotor = m.rotor().state();
     double angle = rotor.angle;
     if (m.phase() == gameplay::MatchPhase::Playing && !m.paused() && f.status() == gameplay::FieldStatus::Playing)
@@ -169,6 +176,7 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
         }
         c.r.line(centre, p, needle, col);
         drawBall(c, p, ball, 0, col, false);
+        if (hit) cross(c, p, px(c, ball));
     }
     // Burnt needles flare up and vanish where they were.
     for (const gameplay::BurnMark& b : f.burns()) {
@@ -185,7 +193,8 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
         const Vec2 p{centre.x, centre.y + px(c, static_cast<float>(fl.distance))};
         const bool hit = f.status() == gameplay::FieldStatus::Failed && f.conflictFlying() && *f.conflictFlying() == i;
         if (fl.fire) flame(c, p, px(c, ball * 2.6f), px(c, ball * 5.5f), std::numbers::pi_v<float>, colors::kWhite);
-        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fl.fire ? kFireHot : fg, true);
+        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fl.fire ? kFireHot : fg, !hit);
+        if (hit) cross(c, p, px(c, ball));
     }
     // Waiting needles: the next one sits at the launcher, the rest queue below it.
     const int left = f.needlesLeft();
@@ -213,15 +222,24 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
     c.r.text(round, {centre.x, centre.y - cap * 0.5f}, cap, colors::kBlack, Align::Center, cap * 0.12f);
 }
 
-void drawTries(const ScreenContext& c, int s, const gameplay::Participant& p, int maxTries) {
+// Tries as little needles hanging from the top-right corner; the one just lost pops.
+void drawTries(const ScreenContext& c, int s, const gameplay::Participant& p, int maxTries, std::uint64_t now) {
     const Rect& col = c.layout.columns[static_cast<std::size_t>(s)];
-    const float r = px(c, 6);
+    const float r = px(c, 8);
+    const double sinceLost = p.tryLostTick > 0 ? ticksToSeconds(p.tryLostTick, now) : 99.0;
     for (int i = 0; i < maxTries; ++i) {
-        const Vec2 pt{col.x + col.w - px(c, 46) - px(c, 22) * static_cast<float>(i), col.y + px(c, 86)};
-        if (i < p.tries)
-            c.r.fillCircle(pt, r, colors::kWhite);
-        else
-            c.r.ring(pt, r, px(c, 1.6f), colors::kOut);
+        const Vec2 ballAt{col.x + col.w - px(c, 46) - px(c, 28) * static_cast<float>(i), col.y + px(c, 100)};
+        const Vec2 top{ballAt.x, ballAt.y - px(c, 22)};
+        if (i < p.tries) {
+            c.r.line(top, ballAt, px(c, 2), colors::kWhite);
+            c.r.fillCircle(ballAt, r, colors::kWhite);
+        } else {
+            c.r.ring(ballAt, r, px(c, 1.6f), colors::kOut);
+            if (i == p.tries && sinceLost < 0.5) {
+                const float k = static_cast<float>(sinceLost / 0.5);
+                c.r.ring(ballAt, r * (1.0f + 2.5f * k), px(c, 2), kMissRed.withAlpha(1.0f - k));
+            }
+        }
     }
 }
 
@@ -248,21 +266,28 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
             drawInitialsColumn(c, s);
             continue;
         }
-        // Fail flash: the column glows dark red and fades.
-        if (!tally && f.status() == gameplay::FieldStatus::Failed && now >= f.failTick()) {
+        // Fail: the column glows dark red and fades, and only this column gives a short shake (the
+        // shared circle never stutters).
+        Vec2 shake{0.0f, 0.0f};
+        if (!tally && f.status() == gameplay::FieldStatus::Failed && f.failReason() != gameplay::FailReason::Clock && now >= f.failTick()) {
             const double since = static_cast<double>(now - f.failTick()) * geom::kTickSeconds;
             if (since < 0.6) {
                 const float a = static_cast<float>(1.0 - since / 0.6);
-                c.r.fillRect(col, colors::kFail.withAlpha(a));
+                c.r.fillRect(col, colors::kFail.withAlpha(reduceFlashes(c) ? a * 0.3f : a));
+            }
+            if (since < 0.3 && !reduceFlashes(c)) {
+                const float k = static_cast<float>(1.0 - since / 0.3);
+                shake.x = std::sin(static_cast<float>(since) * 90.0f) * px(c, 9) * k;
             }
         }
         StationLook look;
+        look.fg = stationColor(c, s);
         if (out) look.fg = colors::kOut;
         look.rainbow = !out && m.crownHolder() == s && !tally;
         std::string kind = bot ? "cpu" : "player";
         if (p->team >= 0) kind += std::format("  team {}", p->team + 1);
         drawStationHeader(c, s, kind, out ? colors::kOut : colors::kWhite);
-        if (m.mode().knockouts || m.mode().teams) drawTries(c, s, *p, m.maxTries());
+        if (m.mode().knockouts || m.mode().teams) drawTries(c, s, *p, m.maxTries(), now);
         drawModeCounts(c, m, s);
         if (tally && m.tallied(s)) {
             drawTallyStation(c, m, s);
@@ -280,27 +305,46 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
             c.r.ring(c.layout.circleCenter[static_cast<std::size_t>(s)], px(c, static_cast<float>(geom::kCoreRadius)), px(c, 2), colors::kDim);
             continue;
         }
-        drawField(c, s, m, look);
-        // Clear pulse: a ring expanding out of the circle.
+        drawField(c, s, m, look, shake);
+        // Clear: a ring bursts out of the circle with a spray of sparks.
         if (f.status() == gameplay::FieldStatus::Cleared && now >= f.clearTick()) {
             const double since = static_cast<double>(now - f.clearTick()) * geom::kTickSeconds;
+            const Vec2 centre = c.layout.circleCenter[static_cast<std::size_t>(s)];
             if (since < 0.7) {
                 const float k = static_cast<float>(since / 0.7);
-                c.r.ring(c.layout.circleCenter[static_cast<std::size_t>(s)], px(c, 60.0f + 140.0f * k), px(c, 3), colors::kWhite.withAlpha(1.0f - k));
+                c.r.ring(centre, px(c, 60.0f + 140.0f * k), px(c, reduceFlashes(c) ? 2.0f : 3.0f), colors::kWhite.withAlpha(1.0f - k));
+                if (!reduceFlashes(c))
+                    for (int i = 0; i < 12; ++i) {
+                        const float a = kTau * static_cast<float>(i) / 12.0f + 0.3f;
+                        const float d = px(c, 70.0f + 210.0f * easeOut(k));
+                        c.r.fillCircle({centre.x + std::cos(a) * d, centre.y + std::sin(a) * d}, px(c, 5.0f * (1.0f - k) + 1.0f), kGold.withAlpha(1.0f - k));
+                    }
             }
             drawStationStatus(c, s, "clear", colors::kWhite);
         } else if (f.status() == gameplay::FieldStatus::Failed) {
             drawStationStatus(c, s, f.failReason() == gameplay::FailReason::Timeout ? "time" : "miss", kMissRed);
         } else if (m.phase() == gameplay::MatchPhase::Ready) {
-            if (m.junkFor(s) > 0)
+            if (m.junkFor(s) > 0) {
                 drawStationStatus(c, s, std::format("+{} junk", m.junkFor(s)), kJunk, 24);
-            else
-                drawStationStatus(c, s, "ready", colors::kDim, 24);
+            } else {
+                // A 3-2-1 over the ready pause.
+                const double left = std::max(0.0, m.config().readyDelay - m.phaseTime());
+                const int n = std::clamp(static_cast<int>(std::ceil(left / std::max(0.1, m.config().readyDelay) * 3.0)), 1, 3);
+                drawStationStatus(c, s, std::to_string(n), colors::kWhite, 34);
+            }
         } else if (f.onFire(now)) {
             drawStationStatus(c, s, "on fire!", kFire, 28);
         } else if (f.lastClaim() && now >= f.lastClaimTick() &&
                    static_cast<double>(now - f.lastClaimTick()) * geom::kTickSeconds < 0.9) {
             drawStationStatus(c, s, powerupLabel(*f.lastClaim()), colors::kWhite, 26);
+        }
+        // A close call pops up next to the circle (no numbers: scores stay hidden till the round ends).
+        if (p->closeCallTick > 0 && now >= p->closeCallTick && f.status() == gameplay::FieldStatus::Playing) {
+            const double since = ticksToSeconds(p->closeCallTick, now);
+            if (since < 0.7) {
+                const float k = static_cast<float>(since / 0.7);
+                textAt(c, "close call!", col.x + col.w * 0.5f, col.y + px(c, 228.0f - 26.0f * k), 18, kGold.withAlpha(1.0f - k));
+            }
         }
         drawFireMeter(c, s, f, now);
         if (m.phase() == gameplay::MatchPhase::Playing && f.status() == gameplay::FieldStatus::Playing) {
@@ -312,8 +356,8 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
     drawCrownLayer(c, m);
     if (m.phase() != gameplay::MatchPhase::Over && m.phase() != gameplay::MatchPhase::Tally) drawModeBanner(c, m, demo);
     if (demo) {
-        if (blink(c.time))
-            textAt(c, startPrompt(c), midX(c), areaY(c, 600), 40, colors::kWhite);
+        band(c, 570, 90, 0.85f); // the call to play stays readable over four busy circles
+        if (blink(c.time)) textAt(c, startPrompt(c), midX(c), areaY(c, 594), 40, colors::kWhite);
     }
 }
 

@@ -1,6 +1,8 @@
 // The end of a match: initials for whoever made a high score table, then the results; plus the
 // paused / disconnected overlays drawn over a match.
 
+#include <algorithm>
+#include <array>
 #include <format>
 #include <string>
 
@@ -37,57 +39,99 @@ void drawInitialsState(const ScreenContext& c) {
     textAt(c, "new high score", midX(c), areaY(c, 22), 22, kGold);
 }
 
+namespace {
+
+const char* placeName(int rank) {
+    switch (rank) {
+    case 1: return "1st";
+    case 2: return "2nd";
+    case 3: return "3rd";
+    default: return "4th";
+    }
+}
+
+// The match's awards: each goes to everyone sharing the best value (above zero).
+std::array<std::string, gameplay::kMaxStations> awards(const gameplay::Match& m) {
+    std::array<std::string, gameplay::kMaxStations> out{};
+    struct Award {
+        const char* name;
+        int (*value)(const gameplay::Participant&);
+    };
+    const Award list[] = {
+        {"crown king", [](const gameplay::Participant& p) { return p.crownsWon; }},
+        {"best combo", [](const gameplay::Participant& p) { return p.bestCombo; }},
+        {"close shaves", [](const gameplay::Participant& p) { return p.closeCalls; }},
+        {"hot hands", [](const gameplay::Participant& p) { return p.ignitions; }},
+    };
+    for (const Award& a : list) {
+        int best = 0;
+        for (int s = 0; s < gameplay::kMaxStations; ++s)
+            if (const auto& p = m.participant(s)) best = std::max(best, a.value(*p));
+        if (best <= 0) continue;
+        for (int s = 0; s < gameplay::kMaxStations; ++s) {
+            const auto& p = m.participant(s);
+            auto& slot = out[static_cast<std::size_t>(s)];
+            if (p && slot.empty() && a.value(*p) == best) slot = std::format("{} {}", a.name, best);
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+// Results: one card per player in their own column, with place, score and an award.
 void drawGameOver(const ScreenContext& c) {
     const auto& res = c.arcade.lastResult();
-    if (const gameplay::Match* m = c.arcade.match()) drawMatch(c, *m, false);
-    c.r.fillRect({0, 0, c.layout.width, c.layout.height}, colors::kBlack.withAlpha(0.86f));
+    const gameplay::Match* m = c.arcade.match();
+    scrim(c, 1.0f);
     const float cx = midX(c);
-    textAt(c, "GAME OVER", cx, areaY(c, 150), 70, colors::kWhite);
-    if (!res) return;
-    textAt(c, gameplay::modeName(res->gameMode), cx, areaY(c, 236), 20, colors::kDim);
-    if (res->winningTeam) {
-        textAt(c, std::format("team {} wins", *res->winningTeam + 1), cx, areaY(c, 290), 56, colors::kWhite);
-        textAt(c, *res->winningTeam == 0 ? "P1 + P2" : "P3 + P4", cx, areaY(c, 370), 18, colors::kDim);
-    } else if (res->winner >= 0) {
-        const auto i = static_cast<std::size_t>(res->winner);
-        const bool bot = res->lineup.seats[i] == players::SeatKind::Bot;
-        textAt(c, std::format("P{} wins", res->winner + 1), cx, areaY(c, 290), 56, colors::kWhite);
-        textAt(c, bot ? "cpu" : "player", cx, areaY(c, 370), 18, colors::kDim);
-        // Frame the winning column.
-        const Rect& col = c.layout.columns[i];
-        c.r.ring({col.x + col.w * 0.5f, c.layout.circleCenter[i].y}, px(c, 205), px(c, 2), colors::kWhite.withAlpha(blink(c.time, 0.8) ? 1.0f : 0.4f));
-    } else {
-        const int cleared = res->standings.empty() ? 0 : res->roundsCleared[static_cast<std::size_t>(res->standings.front())];
-        textAt(c, std::format("rounds cleared {}", cleared), cx, areaY(c, 290), 48, colors::kWhite);
+    for (int k = 1; k < 4; ++k) { // dividers below the title
+        const Rect& col = c.layout.columns[static_cast<std::size_t>(k)];
+        c.r.line({col.x, areaY(c, 170)}, {col.x, col.y + col.h - px(c, 30)}, 1.0f, colors::kFaint);
     }
-    float y = 470;
-    int rank = 1;
-    for (int s : res->standings) {
+    textAt(c, "game over", cx, areaY(c, 34), 46, colors::kWhite);
+    if (!res || !m) return;
+    std::string headline;
+    if (res->winningTeam)
+        headline = std::format("team {} wins  -  {}", *res->winningTeam + 1, gameplay::modeName(res->gameMode));
+    else if (res->winner >= 0)
+        headline = std::format("P{} wins  -  {}", res->winner + 1, gameplay::modeName(res->gameMode));
+    else
+        headline = std::format("{}  -  rounds cleared {}", gameplay::modeName(res->gameMode),
+                               res->standings.empty() ? 0 : res->roundsCleared[static_cast<std::size_t>(res->standings.front())]);
+    textAt(c, headline, cx, areaY(c, 100), 22, colors::kDim);
+    const auto prizes = awards(*m);
+    const auto end = gameplay::modeRules(res->gameMode).end;
+    for (std::size_t rank = 0; rank < res->standings.size(); ++rank) {
+        const int s = res->standings[rank];
         const auto i = static_cast<std::size_t>(s);
+        const Rect& col = c.layout.columns[i];
+        const float x = col.x + col.w * 0.5f;
         const bool bot = res->lineup.seats[i] == players::SeatKind::Bot;
-        const Color col = rank == 1 ? colors::kWhite : colors::kDim;
-        const float yy = areaY(c, y);
-        c.r.text(std::format("{}", rank), {cx - px(c, 420), yy}, px(c, 24), col, Align::Right);
-        c.r.text(std::format("P{}  {}", s + 1, bot ? "cpu" : "player"), {cx - px(c, 380), yy}, px(c, 24), col, Align::Left);
-        c.r.text(std::to_string(res->scores[i]), {cx + px(c, 160), yy}, px(c, 26), col, Align::Right);
-        const auto end = gameplay::modeRules(res->gameMode).end;
+        const bool first = rank == 0 && res->winner >= 0;
+        const Color hi = first ? kGold : colors::kWhite;
+        textAt(c, std::format("P{}", s + 1), x, col.y + px(c, 196), 30, stationColor(c, s));
+        textAt(c, bot ? "cpu" : "player", x, col.y + px(c, 236), 16, colors::kDim);
+        textAt(c, placeName(static_cast<int>(rank) + 1), x, col.y + px(c, 280), 64, hi);
+        if (first) frame(c, {col.x + px(c, 24), col.y + px(c, 176), col.w - px(c, 48), px(c, 480)}, px(c, 2), kGold.withAlpha(blink(c.time, 0.8) ? 1.0f : 0.5f));
+        textAt(c, std::to_string(res->scores[i]), x, col.y + px(c, 390), 46, colors::kWhite);
+        textAt(c, "points", x, col.y + px(c, 448), 16, colors::kDim);
         const std::string extra = end == gameplay::MatchEnd::FirstTo ? std::format("rounds won {}", res->points[i])
                                   : end == gameplay::MatchEnd::Rounds ? std::format("crown points {}", res->points[i])
                                                                       : std::format("rounds cleared {}", res->roundsCleared[i]);
-        c.r.text(extra, {cx + px(c, 220), yy}, px(c, 18), colors::kDim, Align::Left);
-        ++rank;
-        y += 56;
+        textAt(c, extra, x, col.y + px(c, 510), 18, colors::kWhite);
+        if (!prizes[i].empty()) textAt(c, prizes[i], x, col.y + px(c, 590), 20, kGold);
     }
 }
 
 void drawSuspendedOverlay(const ScreenContext& c) {
-    c.r.fillRect({0, 0, c.layout.width, c.layout.height}, colors::kBlack.withAlpha(0.72f));
+    scrim(c, 0.86f);
     textAt(c, "paused", midX(c), areaY(c, 430), 60, colors::kWhite);
     if (blink(c.time)) textAt(c, c.touchUi ? "tap to continue" : "press start or fire to continue", midX(c), areaY(c, 540), 26, colors::kWhite);
 }
 
 void drawDisconnectOverlay(const ScreenContext& c) {
-    c.r.fillRect({0, 0, c.layout.width, c.layout.height}, colors::kBlack.withAlpha(0.72f));
+    scrim(c, 0.88f);
     float y = 380;
     for (int s = 0; s < gameplay::kMaxStations; ++s) {
         if (!c.arcade.stationWaitingForReconnect(s)) continue;

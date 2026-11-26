@@ -127,6 +127,15 @@ Coin and cabinet behaviour.
 | `exit_hold_seconds` | `2` | 0..10 | hold the exit key this long to quit; 0 = locked cabinet (service menu only) |
 | `initials_seconds` | `15` | 10..30 | seconds a player has to shoot their initials into the high score table |
 
+### [Accessibility]
+
+Easier to read, easier on the eyes.
+
+| Key | Default | Valid | Meaning |
+|---|---|---|---|
+| `accent_colors` | `0` | 0 \| 1 | 1 = each station gets its own colour (P1 cyan, P2 pink, P3 green, P4 orange) |
+| `reduce_flashes` | `0` | 0 \| 1 | 1 = softer fail flashes and no shaking |
+
 ### [Modes]
 
 Game modes players can vote for (1 = on). With every mode off, battle stays on.

@@ -30,6 +30,12 @@ count as game input, so players cannot open it by accident). The menu then shows
 
 The same gesture works on any touch screen, including a touch monitor on a Windows cabinet.
 
+## Player options (phones)
+
+On a phone or tablet a gear sits in the top-right corner of the attract and insert-coin screens. Tapping
+it opens a single **options** page for players: volume, game sounds, menu sounds, reduce flashes and
+player colours. Leaving it (done, back, or the back button) saves. It never shows the operator pages.
+
 ## Pages
 
 | Page | What it does |
@@ -38,7 +44,7 @@ The same gesture works on any touch screen, including a touch monitor on a Windo
 | controller assignment | Assignment mode (`auto` / `fixed`), what a disconnect does (`pause` / `continue`), the controller on each station (select, then press any button on the controller to assign it; left clears the station), and "remember these for fixed mode" to store the current controllers' GUIDs. |
 | keybinds | Select an action (fire, start, left, right per station, then the cabinet keys), then press the new key. Also "keyboard per station" and, per station, the keyboard it listens to (select, then press any key on that keyboard; left resets it to any keyboard). |
 | display test | Square grid, diagonals, the four station circles with moving needles, resolution, renderer, vsync and frame time. |
-| video | Resolution (auto or any mode the monitor reports), fullscreen mode, vsync, monitor, frame cap; "apply now" previews it. |
+| video | Resolution (auto or any mode the monitor reports), fullscreen mode, vsync, reduce flashes, player colours, monitor, frame cap; "apply now" previews it. |
 | sound test | Plays each sound (including the powerup, shield, ignite and burn sounds); shows the audio device or "unavailable (silent)". |
 | volumes | Master, game sounds, coin and menu sounds (heard while changing), attract sound. |
 | game settings | Tries, round time limit, rotation speed, needle speed, ready delay, start round, level seed, powerups on/off and each ring type (shield, skip, slim, mend, heat, purge, swift) on/off, the fire meter on/off, the combo to catch fire, seconds on fire, the combo chain window, and the round end screen (full / short / off). |

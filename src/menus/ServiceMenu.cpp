@@ -57,7 +57,15 @@ void ServiceMenu::open(bool byTouch) {
     log::info("service: menu opened");
 }
 
+void ServiceMenu::openPlayerOptions() {
+    open(true);
+    playerMode_ = true;
+    show(PageId::PlayerOptions);
+    log::info("service: player options opened");
+}
+
 void ServiceMenu::close(bool save) {
+    playerMode_ = false;
     host_.inputSystem().cancelCapture();
     capture_ = Capture::None;
     if (save) {
@@ -271,6 +279,29 @@ void ServiceMenu::build(PageId id) {
         }
         break;
     }
+    case PageId::PlayerOptions: {
+        title = "options";
+        auto preview = [this](MenuItem m) {
+            auto inner = m.adjust;
+            m.adjust = [this, inner](int d) {
+                inner(d);
+                host_.previewVolumes(edit_.audio);
+                host_.playSound(audio::SoundId::NeedleHit);
+            };
+            return m;
+        };
+        items.push_back(preview(intItem("volume", edit_.audio.masterVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
+        MenuItem flashes = boolItem("reduce flashes", edit_.accessibility.reduceFlashes);
+        flashes.separatorBefore = true;
+        items.push_back(std::move(flashes));
+        items.push_back(boolItem("player colours", edit_.accessibility.accentColors));
+        MenuItem done = actionItem("done", [this] { close(true); });
+        done.separatorBefore = true;
+        items.push_back(std::move(done));
+        break;
+    }
     case PageId::Video: {
         title = "video";
         MenuItem res;
@@ -293,6 +324,8 @@ void ServiceMenu::build(PageId id) {
         };
         items.push_back(std::move(fs));
         items.push_back(boolItem("vsync", edit_.display.vsync));
+        items.push_back(boolItem("reduce flashes", edit_.accessibility.reduceFlashes));
+        items.push_back(boolItem("player colours", edit_.accessibility.accentColors));
         items.push_back(intItem("monitor", edit_.display.displayIndex, 0, std::max(0, host_.display().displayCount() - 1)));
         MenuItem fps;
         fps.label = "frame cap (vsync off)";
@@ -522,6 +555,11 @@ std::optional<render::Vec2> ServiceMenu::rowPoint(int index) const {
 
 void ServiceMenu::back() {
     if (!open_) return;
+    if (playerMode_) {
+        close(true);
+        host_.playSound(audio::SoundId::MenuSelect);
+        return;
+    }
     if (capture_ != Capture::None) {
         host_.inputSystem().cancelCapture();
         capture_ = Capture::None;
@@ -623,6 +661,11 @@ void ServiceMenu::update(const input::TickInput& in, double dt) {
         return;
     }
 
+    if (playerMode_ && (pressed(input::Action::Service) || pressed(input::Action::MenuBack))) {
+        close(true);
+        host_.playSound(audio::SoundId::MenuSelect);
+        return;
+    }
     if (pressed(input::Action::Service)) {
         if (pageId_ != PageId::Main)
             show(PageId::Main);

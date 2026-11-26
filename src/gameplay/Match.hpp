@@ -52,6 +52,10 @@ struct Participant {
     int team = -1;       // teams: 0 = P1 + P2, 1 = P3 + P4
     int raceWins = 0;    // race: rounds taken by clearing first
     int crownPoints = 0; // crown: round ends spent holding the crown
+
+    // For the screen: when the last try was lost and the last close call landed (0 = never).
+    std::uint64_t tryLostTick = 0;
+    std::uint64_t closeCallTick = 0;
 };
 
 struct MatchConfig {

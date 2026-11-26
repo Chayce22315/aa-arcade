@@ -200,3 +200,16 @@ TEST_CASE(touch_vote_screen_joined_columns_pick_and_vote) {
     CHECK(input::touchHit(c, 0.48f, 0.5f)->action == Action::Right);
     CHECK_EQ(input::touchHit(c, 0.48f, 0.5f)->station, 1);
 }
+
+TEST_CASE(touch_top_right_corner_is_the_gear_or_the_pause_button) {
+    TouchContext lobby;
+    CHECK(input::touchHit(lobby, 0.97f, 0.05f)->action == Action::Start); // no gear: it is just column 4
+    lobby.gear = true;
+    CHECK(input::touchHit(lobby, 0.97f, 0.05f)->action == Action::Options);
+    CHECK_EQ(input::touchHit(lobby, 0.97f, 0.05f)->station, -1);
+    CHECK(input::touchHit(lobby, 0.97f, 0.5f)->action == Action::Start); // below the corner
+    TouchContext solo = playing({false, true, false, false});
+    solo.pause = true;
+    CHECK(input::touchHit(solo, 0.95f, 0.08f)->action == Action::Pause);
+    CHECK(input::touchHit(solo, 0.5f, 0.5f)->action == Action::Fire);
+}

@@ -7,6 +7,8 @@ namespace spindle::input {
 
 bool inServiceCorner(float nx, float ny) { return nx >= 0.0f && ny >= 0.0f && nx < kServiceCornerWidth && ny < kServiceCornerHeight; }
 
+bool inButtonCorner(float nx, float ny) { return nx <= 1.0f && ny >= 0.0f && nx > 1.0f - kButtonCornerWidth && ny < kButtonCornerHeight; }
+
 int columnAt(const TouchContext& c, float nx) {
     for (int s = 0; s < 3; ++s)
         if (nx < c.columnEdges[static_cast<std::size_t>(s) + 1]) return s;
@@ -31,6 +33,10 @@ float withinColumn(const TouchContext& c, int s, float nx) {
 std::optional<TouchHit> touchHit(const TouchContext& c, float nx, float ny) {
     if (!std::isfinite(nx) || !std::isfinite(ny) || nx < 0.0f || ny < 0.0f || nx > 1.0f || ny > 1.0f) return std::nullopt;
     if (inServiceCorner(nx, ny)) return std::nullopt;
+    if (inButtonCorner(nx, ny)) {
+        if (c.screen == TouchScreen::Lobby && c.gear) return TouchHit{Action::Options, -1};
+        if (c.screen == TouchScreen::Playing && c.pause) return TouchHit{Action::Pause, -1};
+    }
     switch (c.screen) {
     case TouchScreen::Ignore: return std::nullopt;
     case TouchScreen::Lobby: {

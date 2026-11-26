@@ -30,6 +30,15 @@ inline constexpr Color kGold{1.0f, 0.82f, 0.3f, 1.0f};
 // ------------------------------------------------------------------ basics
 bool blink(double t, double period = 1.0);
 float px(const ScreenContext& c, float ref);
+// Text sizes: small text never drops below a readable size, and is bumped up on phones.
+inline constexpr float kMinCapPx = 11.0f;
+float capPx(const ScreenContext& c, float refCap);
+// Darkens everything drawn so far (behind an overlay's text), or one horizontal band of it.
+void scrim(const ScreenContext& c, float alpha);
+void band(const ScreenContext& c, float yRef, float hRef, float alpha);
+// A station's colour: white, or its accent when accent colours are on.
+Color stationColor(const ScreenContext& c, int s);
+bool reduceFlashes(const ScreenContext& c);
 void textAt(const ScreenContext& c, std::string_view s, float x, float y, float cap, Color col, Align a = Align::Center);
 float midX(const ScreenContext& c);           // centre of the station area, for full-width messages
 float areaY(const ScreenContext& c, float ref);
@@ -85,6 +94,7 @@ void drawInsertCoin(const ScreenContext& c);
 void drawVote(const ScreenContext& c);                                              // Lobby.cpp
 void drawInitialsState(const ScreenContext& c);                                     // Results.cpp
 void drawGameOver(const ScreenContext& c);
+void drawIris(const ScreenContext& c, float t); // 0..1: a circle opens onto the new screen
 void drawSuspendedOverlay(const ScreenContext& c);
 void drawDisconnectOverlay(const ScreenContext& c);
 
