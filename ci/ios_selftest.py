@@ -49,7 +49,7 @@ def main() -> int:
     console = ""
     try:
         p = run("xcrun", "simctl", "launch", "--console", "--terminate-running-process", udid, BUNDLE, "--selftest",
-                check=False, timeout=1800)
+                check=False, timeout=1200)
         console = p.stdout + p.stderr
     except subprocess.TimeoutExpired as e:
         console = f"timed out\n{e.stdout or ''}{e.stderr or ''}"

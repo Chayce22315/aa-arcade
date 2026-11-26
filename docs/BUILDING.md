@@ -66,6 +66,12 @@ open build/ios/spindle.xcodeproj
 - **Simulator:** build the `spindle` scheme for any iPhone or iPad simulator. From the command line:
   `cmake --build build/ios --config Release -- -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO`, then
   `python3 ci/ios_selftest.py build/ios/Release-iphonesimulator/spindle.app out/` runs the self-test.
+- **The .ipa from CI:** every push builds `spindle-ios-unsigned.ipa` (arm64, iOS 16.4+). It is
+  deliberately unsigned: iPhones only run apps signed for them, and signing needs an Apple account
+  (spindle never holds anyone's certificates). To put it on your own phone, open it with a sideloading
+  tool that signs it with your Apple ID (Sideloadly or AltStore, for example; with a free Apple ID the
+  app runs for 7 days before it has to be signed again), or build from Xcode as below. You can upload the
+  .ipa to itch.io, but players can only install it the same way, by signing it themselves.
 - **Your own iPhone:** configure with `-DSPINDLE_IOS_TEAM_ID=<your team id>` (Xcode > Settings >
   Accounts; a free Apple ID works, but the app then expires after 7 days), plug the phone in, pick it
   as the run destination and press Run. Apple decides signing; spindle only passes your team id on.
