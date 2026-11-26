@@ -33,6 +33,7 @@ config::Settings SelfTest::adjustSettings(config::Settings s) {
     s.gameplay.fireChainWindow = 2.0;
     s.arcade.voteSeconds = 10;
     s.modes = config::Settings::defaults().modes; // every mode on: the script votes battle where it needs it
+    s.bots.difficulty = config::Difficulty::Easy;  // the singleplayer bots finish their match sooner
     s.arcade.gameOverTime = 3;
     s.display.fullscreen = config::FullscreenMode::Windowed;
     s.display.resolution = config::Resolution{false, 1280, 720};

@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 
 #include "config/Settings.hpp"
+#include "engine/Platform.hpp"
 
 namespace spindle {
 
@@ -21,7 +22,8 @@ class App;
 // selftest_report.txt to DIR and exits 0 only if every step passed.
 class SelfTest {
 public:
-    static constexpr int kTicksPerFrame = 24; // render 10 times per simulated second to keep the run fast
+    // Render 10 times per simulated second (4 on phones, whose emulators draw slowly) to keep the run fast.
+    static constexpr int kTicksPerFrame = platform::kMobile ? 60 : 24;
 
     SelfTest(App& app, std::filesystem::path outDir);
     ~SelfTest();
