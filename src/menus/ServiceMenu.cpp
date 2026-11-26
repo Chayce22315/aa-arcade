@@ -150,6 +150,31 @@ MenuItem ServiceMenu::keyItem(std::string label, std::string& binding) {
 
 // ------------------------------------------------------------------ pages
 
+// Vibration (phones) and rumble (gamepads); every change buzzes once so the operator can feel it.
+void ServiceMenu::addFeedbackItems(std::vector<MenuItem>& items) {
+    auto buzz = [this](MenuItem m) {
+        auto inner = m.adjust;
+        m.adjust = [this, inner](int d) {
+            inner(d);
+            host_.previewFeedback(edit_.feedback);
+        };
+        return m;
+    };
+    if (host_.touchUi()) {
+        MenuItem vib = buzz(boolItem("vibration", edit_.feedback.vibration));
+        vib.separatorBefore = true;
+        if (!host_.phoneVibrates()) {
+            vib.enabled = false;
+            vib.value = [] { return std::string("not on this device"); };
+        }
+        items.push_back(std::move(vib));
+    }
+    MenuItem rumble = buzz(boolItem("gamepad rumble", edit_.feedback.gamepadRumble));
+    rumble.separatorBefore = !host_.touchUi();
+    items.push_back(std::move(rumble));
+    items.push_back(buzz(intItem(host_.touchUi() ? "vibration strength" : "rumble strength", edit_.feedback.strength, 0, 100, 10, "%")));
+}
+
 void ServiceMenu::show(PageId id) {
     pageId_ = id;
     pendingConfirm_.clear();
@@ -293,6 +318,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(preview(intItem("volume", edit_.audio.masterVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
+        addFeedbackItems(items);
         MenuItem flashes = boolItem("reduce flashes", edit_.accessibility.reduceFlashes);
         flashes.separatorBefore = true;
         items.push_back(std::move(flashes));
@@ -364,6 +390,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("coin and menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
         items.push_back(boolItem("attract sound", edit_.audio.attractSound));
+        addFeedbackItems(items);
         break;
     }
     case PageId::Game: {

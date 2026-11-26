@@ -111,7 +111,8 @@ void drawGameOver(const ScreenContext& c) {
         const bool first = rank == 0 && res->winner >= 0;
         const Color hi = first ? kGold : colors::kWhite;
         textAt(c, std::format("P{}", s + 1), x, col.y + px(c, 196), 30, stationColor(c, s));
-        textAt(c, bot ? "cpu" : "player", x, col.y + px(c, 236), 16, colors::kDim);
+        const bots::BotController* brain = bot ? c.arcade.bot(s) : nullptr;
+        textAt(c, bot ? (brain ? brain->brain().name() : std::string("cpu")) : std::string("player"), x, col.y + px(c, 236), 16, colors::kDim);
         textAt(c, placeName(static_cast<int>(rank) + 1), x, col.y + px(c, 280), 64, hi);
         if (first) frame(c, {col.x + px(c, 24), col.y + px(c, 176), col.w - px(c, 48), px(c, 480)}, px(c, 2), kGold.withAlpha(blink(c.time, 0.8) ? 1.0f : 0.5f));
         textAt(c, std::to_string(res->scores[i]), x, col.y + px(c, 390), 46, colors::kWhite);

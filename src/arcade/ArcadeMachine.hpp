@@ -10,6 +10,7 @@
 
 #include "arcade/Bookkeeping.hpp"
 #include "arcade/Credits.hpp"
+#include "arcade/Haptics.hpp"
 #include "arcade/HighScores.hpp"
 #include "arcade/InitialsEntry.hpp"
 #include "arcade/VoteBox.hpp"
@@ -45,12 +46,13 @@ struct ArcadeInput {
     int serviceCredits = 0;
 };
 
-enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused };
+enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused, Haptic };
 
 struct ArcadeEvent {
     ArcadeEventType type = ArcadeEventType::Sound;
     audio::SoundId sound = audio::SoundId::Coin;
-    int station = -1;
+    int station = -1; // Haptic: the human station that feels it, -1 = every human
+    HapticKind haptic = HapticKind::Tick;
 };
 
 struct MatchResult {
@@ -163,6 +165,7 @@ private:
     void tallySounds(bool demo);
     void updatePause();
     void sound(audio::SoundId id, bool demo = false);
+    void haptic(HapticKind kind, int station, bool demo = false); // humans only, never in the demo
     gameplay::MatchConfig matchConfig(bool demo, gameplay::ModeId mode);
 
     config::Settings settings_;

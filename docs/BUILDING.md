@@ -133,7 +133,12 @@ build/core/spindle_tests
 
 - **Levels**: edit `data/scripts/levels.lua` and rebuild (it is embedded). For a cabinet, a copy at
   `data/scripts/levels.lua` next to the exe overrides the embedded one without rebuilding.
-- **Bots**: the same with `data/scripts/bots/bot.lua`.
+- **Bots**: the same with `data/scripts/bots/bot.lua`. Each difficulty has a `names` pool there; a CPU
+  takes one by its seed and shows it in its column header and on the results.
+- **Without the exe's folder** (phones, or a locked install): `scripts/levels.lua` and `scripts/bot.lua`
+  in the writable folder (where `settings.ini` lives) work as the same overrides. The exe's own
+  `data/scripts/` copy wins when both exist. A bot script that does not load is rejected at boot with a
+  warning in the log and the embedded one is used; a level script that fails falls back per round.
 - **Sounds**: edit the recipes in `tools/gen_sfx.py`, run it, commit the WAVs, rebuild.
 - **The flame image**: edit `tools/gen_art.py`, run it, commit `data/art/flame.png`, rebuild.
 - **Title**: `src/engine/Branding.hpp` and the CMake project name.

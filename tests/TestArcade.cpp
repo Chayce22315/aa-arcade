@@ -334,3 +334,42 @@ TEST_CASE(arcade_attract_shows_high_scores_once_there_are_any) {
     }
     CHECK(sawPage);
 }
+
+TEST_CASE(arcade_haptics_go_to_human_stations_only_and_never_the_demo) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.bots.singleplayerBots = 3;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 7);
+    // The attract demo is all bots: nothing buzzes.
+    for (int i = 0; i < 40 * kSecond; ++i) {
+        m.tick({});
+        for (const auto& e : m.takeEvents()) CHECK(e.type != arcade::ArcadeEventType::Haptic);
+    }
+    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    int ticksFelt = 0, others = 0;
+    for (int i = 0; i < 40 * kSecond && m.match() && m.match()->round() == 1; ++i) {
+        playTick(m, 0, aimed);
+        for (const auto& e : m.takeEvents()) {
+            if (e.type != arcade::ArcadeEventType::Haptic) continue;
+            if (e.station != 0) ++others;
+            if (e.haptic == arcade::HapticKind::Tick) ++ticksFelt;
+        }
+    }
+    CHECK(ticksFelt > 0);
+    CHECK_EQ(others, 0); // the three CPUs placed needles too, but never buzz
+}
+
+TEST_CASE(arcade_haptic_patterns_are_short_and_bounded) {
+    using arcade::HapticKind;
+    for (HapticKind k : {HapticKind::Tick, HapticKind::CloseCall, HapticKind::Fail, HapticKind::Fire, HapticKind::Clear, HapticKind::Digit,
+                         HapticKind::Letter, HapticKind::Crown, HapticKind::Select}) {
+        const auto p = arcade::hapticPattern(k);
+        CHECK(p.strength > 0.0f && p.strength <= 1.0f);
+        CHECK(p.milliseconds > 0 && p.milliseconds <= 250);
+        CHECK(p.strength <= arcade::hapticPattern(HapticKind::Fail).strength);
+    }
+    CHECK(arcade::hapticPattern(HapticKind::Crown).doublePulse);
+}

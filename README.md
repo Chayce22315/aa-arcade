@@ -33,6 +33,8 @@ aa2 or any other title.
 - **Phones and tablets**: Android and iOS builds of the same game. Tap your column to join and to fire
   (anywhere, when you play alone against bots), up to four players around one tablet, pause when the
   app goes to the background, layout kept clear of notches ([docs/BUILDING.md](docs/BUILDING.md#android)).
+- **Feel**: phones vibrate (Android and iPhone) and gamepads rumble for each player's own moments:
+  needles, close calls, fails, fire, clears, the crown ([docs/SETTINGS.md](docs/SETTINGS.md#feedback)).
 - **Input**: built-in, USB and Bluetooth keyboards (optionally one keyboard per station), Xbox,
   PlayStation and generic controllers through SDL3, unmapped joysticks as a fallback, hotplug,
   automatic or fixed assignment, and pause-and-reconnect on disconnect.

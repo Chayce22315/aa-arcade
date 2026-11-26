@@ -183,3 +183,16 @@ is done for the round), the clear burst, close-call pop and try pip are drawn fr
 already keeps (`tryLostTick`, `closeCallTick`), and the iris between screens is purely drawn. Small text
 has a minimum size and is bumped up on phones; overlay text sits on a scrim. "Reduce flashes" softens
 the fail flash and turns the shakes and sparks off; "player colours" tints each station.
+
+**Haptics are moments from the core, feel from the platform.** The arcade machine emits a `Haptic`
+event (what happened, to which station) for human stations only, never in the demo; `arcade/Haptics`
+says how long and how strong each moment is on a plain rumble motor. The app routes it: a station with
+a gamepad rumbles that pad (`SDL_RumbleGamepad`), a touch player buzzes the phone. Android's vibrator
+is SDL's haptic device for `VIBRATOR_SERVICE`, which needs `android.permission.VIBRATE` (a normal
+permission, never prompted). SDL has no iPhone haptics, so `engine/ios/HapticsIos.mm` uses UIKit's
+impact, notification and selection feedback generators, which feel better than a plain buzz anyway.
+Pads are looked up again for each pulse, so a pad unplugged in the middle of a double tap is skipped.
+
+**CPUs have names from the bot script.** Each difficulty in `bot.lua` lists a `names` pool; the bot's
+seed picks one, so the same seed always gives the same name. Names are sanitised to lowercase letters
+and digits (10 at most), and a script without names falls back to `cpu`.

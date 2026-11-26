@@ -400,7 +400,9 @@ void SelfTest::build() {
         for (int s = 0; s < 4; ++s) check(M()->tallied(s), std::format("P{} not on the round end screen", s + 1));
         for (int s = 1; s < 4; ++s) check(M()->participant(s)->score > 0, std::format("P{} scored nothing", s + 1));
         check(M()->participant(1)->roundBonus > 0, "no clear bonus for P2");
-        (void)this;
+        // The pads on P2/P3 (and a phone's touch player) were asked to rumble for their needles.
+        check(app_.haptics_.requests() > 0, "no haptic moment reached a pad or the phone");
+        log::info("selftest: {} haptic moments so far", app_.haptics_.requests());
         return true;
     });
     shot("18_round_end");

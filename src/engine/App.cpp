@@ -1,6 +1,7 @@
 #include "engine/App.hpp"
 
 #include <algorithm>
+#include <array>
 #include <format>
 
 #include <SDL3/SDL_time.h>
@@ -252,6 +253,7 @@ void App::tick(std::uint64_t tickEndNs) {
         }
     }
     handleArcadeEvents();
+    haptics_.update(SDL_GetTicksNS());
     updateScreenSaver();
 
     exitHeld_ = input_.systemHeld(input::Action::Exit) ? exitHeld_ + dt : 0.0;
@@ -262,9 +264,21 @@ void App::tick(std::uint64_t tickEndNs) {
     if (selftest_) selftest_->afterTick();
 }
 
+bool App::stationUsesPhone(int station) const { return touchUi() && !input_.devices().stationHasController(station); }
+
 void App::handleArcadeEvents() {
+    // Several touch players share one phone: it buzzes once per kind of moment per tick.
+    std::array<bool, 16> phoneBuzzed{};
+    const std::uint64_t now = SDL_GetTicksNS();
     for (const arcade::ArcadeEvent& e : arcade_->takeEvents()) {
         switch (e.type) {
+        case arcade::ArcadeEventType::Haptic: {
+            const auto k = static_cast<std::size_t>(e.haptic);
+            bool phone = e.station >= 0 && stationUsesPhone(e.station) && k < phoneBuzzed.size() && !phoneBuzzed[k];
+            if (phone) phoneBuzzed[k] = true;
+            haptics_.play(e.haptic, e.station, phone, now);
+            break;
+        }
         case arcade::ArcadeEventType::Sound: audio_.play(e.sound); break;
         case arcade::ArcadeEventType::SaveBookkeeping: saveBookkeeping(); break;
         case arcade::ArcadeEventType::SaveHighScores: saveHighScores(); break;
@@ -331,6 +345,7 @@ void App::commitSettings(const config::Settings& s) {
         log::info("settings: saved {}", pathToUtf8(paths_.settings()));
     settingsIssues_ = static_cast<std::size_t>(input_.configure(settings_));
     audio_.setVolumes(settings_.audio);
+    haptics_.configure(settings_.feedback);
     arcade_->applySettings(settings_);
     log::setLevel(static_cast<log::Level>(static_cast<int>(settings_.system.logLevel)));
     if (displayChanged) previewDisplay(settings_.display);
@@ -345,6 +360,15 @@ void App::previewDisplay(const config::Settings::Display& d) {
 }
 
 void App::previewVolumes(const config::Settings::Audio& a) { audio_.setVolumes(a); }
+
+void App::previewFeedback(const config::Settings::Feedback& f) {
+    haptics_.configure(f);
+    const std::uint64_t now = SDL_GetTicksNS();
+    for (int s = 0; s < gameplay::kMaxStations; ++s)
+        if (input_.devices().stationHasController(s)) haptics_.play(arcade::HapticKind::Clear, s, false, now);
+    if (touchUi()) haptics_.play(arcade::HapticKind::Clear, -1, true, now);
+    haptics_.configure(settings_.feedback); // only a preview: the saved settings stay in force
+}
 
 void App::saveHighScores() {
     if (!arcade_) return;

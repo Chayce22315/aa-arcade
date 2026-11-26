@@ -11,6 +11,7 @@
 #include "audio/AudioSystem.hpp"
 #include "config/IniDocument.hpp"
 #include "config/Settings.hpp"
+#include "engine/Haptics.hpp"
 #include "engine/Paths.hpp"
 #include "engine/SdlHandles.hpp"
 #include "gameplay/LevelScript.hpp"
@@ -50,6 +51,8 @@ public:
     void commitSettings(const config::Settings& settings) override;
     void previewDisplay(const config::Settings::Display& display) override;
     void previewVolumes(const config::Settings::Audio& audio) override;
+    void previewFeedback(const config::Settings::Feedback& feedback) override;
+    bool phoneVibrates() const override { return touchUi() && haptics_.phoneAvailable(); }
     void playSound(audio::SoundId id) override { audio_.play(id); }
     input::InputSystem& inputSystem() override { return input_; }
     arcade::ArcadeMachine& arcadeMachine() override { return *arcade_; }
@@ -87,6 +90,7 @@ private:
     void tick(std::uint64_t tickEndNs);
     void render();
     void handleArcadeEvents();
+    bool stationUsesPhone(int station) const; // a touch player on this phone (not a gamepad)
     void updateLayout();
     void handleLifecycle(const SDL_Event& e);
     void updateScreenSaver();
@@ -111,6 +115,7 @@ private:
     render::ScreenLayout layout_;
     input::InputSystem input_;
     audio::AudioSystem audio_;
+    Haptics haptics_; // after input_: closed before the devices it rumbles go away
     std::unique_ptr<arcade::ArcadeMachine> arcade_;
     std::unique_ptr<menus::ServiceMenu> service_;
     std::unique_ptr<SelfTest> selftest_;

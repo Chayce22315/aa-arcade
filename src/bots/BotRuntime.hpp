@@ -62,6 +62,8 @@ public:
     void resetMemory();
 
     const BotProfile& profile() const { return profile_; }
+    // A name for the column header, picked from the script's `names` pool by the seed ("cpu" without one).
+    const std::string& name() const { return name_; }
     bool disabled() const { return disabled_; }
     int errorCount() const { return errors_; }
 
@@ -72,6 +74,7 @@ private:
 
     std::unique_ptr<scripting::LuaSandbox> sandbox_;
     BotProfile profile_;
+    std::string name_ = "cpu";
     int decideRef_ = -1;
     int profileRef_ = -1;
     int obsRef_ = -1;

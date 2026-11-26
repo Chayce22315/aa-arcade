@@ -60,6 +60,15 @@ profiles = {
   expert = { reaction = 0.12, compensate = 1.00, jitter = 0.008, blunder = 0.003, clearance = 1.8, near_best = 0.95, rhythm = 0.14, patience = 1.2, window = 3.0, greed = 1.0,  blaze = 1.0, mash = 0.10, hurry = 0.6,  model_accel = true },
 }
 
+-- Names shown in a CPU's column header, picked by each bot's seed. Purely cosmetic: lowercase letters
+-- and digits, up to 10 characters.
+names = {
+  easy   = { "pip", "dot", "bean", "mochi", "sprout", "button" },
+  normal = { "spoke", "dial", "orbit", "reel", "bobbin", "tock" },
+  hard   = { "vortex", "comet", "rivet", "flux", "torque", "nova" },
+  expert = { "zenith", "apex", "quasar", "aurora", "titan", "helix" },
+}
+
 local PI = math.pi
 local TWO_PI = 2 * math.pi
 local BINS = 180               -- reachability map resolution: 2 degree bins

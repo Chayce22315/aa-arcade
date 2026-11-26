@@ -127,6 +127,22 @@ Coin and cabinet behaviour.
 | `exit_hold_seconds` | `2` | 0..10 | hold the exit key this long to quit; 0 = locked cabinet (service menu only) |
 | `initials_seconds` | `15` | 10..30 | seconds a player has to shoot their initials into the high score table |
 
+### [Feedback]
+
+Vibration on phones and rumble on gamepads. Each station feels only its own moments: a needle sticking,
+a close call, a fail, catching fire, a clear, the crown, letters shot into the high score table, the vote
+cursor; every player feels the digits landing on the round end screen. CPUs and the attract demo never
+buzz. Several touch players on one phone share its vibration (one buzz per kind of moment per tick).
+
+| Key | Default | Valid | Meaning |
+|---|---|---|---|
+| `vibration` | `1` | 0 \| 1 | 1 = the phone vibrates for touch players (Android through its vibrator, iPhone through its haptic engine) |
+| `strength` | `70` | 0..100 | how strong vibration and rumble are; phones whose vibrator has no strength control only vary the length |
+| `gamepad_rumble` | `1` | 0 \| 1 | 1 = a gamepad rumbles for its own station's moments (pads without rumble ignore it) |
+
+Both appear in the service menu's volumes page and, on phones, behind the gear on attract; every change
+buzzes once so it can be felt. On a phone without a vibrator spindle can use, "vibration" is greyed out.
+
 ### [Accessibility]
 
 Easier to read, easier on the eyes.

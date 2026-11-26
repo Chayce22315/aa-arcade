@@ -25,6 +25,8 @@ public:
     virtual void commitSettings(const config::Settings& settings) = 0; // apply everywhere and save settings.ini
     virtual void previewDisplay(const config::Settings::Display& display) = 0;
     virtual void previewVolumes(const config::Settings::Audio& audio) = 0;
+    virtual void previewFeedback(const config::Settings::Feedback& feedback) = 0; // one buzz as the setting would feel
+    virtual bool phoneVibrates() const = 0;                                        // this device has a vibrator spindle can use
     virtual void playSound(audio::SoundId id) = 0;
     virtual input::InputSystem& inputSystem() = 0;
     virtual arcade::ArcadeMachine& arcadeMachine() = 0;
@@ -70,6 +72,7 @@ private:
     enum class Capture { None, Key, Controller, Keyboard };
 
     void show(PageId id);
+    void addFeedbackItems(std::vector<MenuItem>& items);
     void build(PageId id);
     void close(bool save);
     bool confirm(const std::string& key);

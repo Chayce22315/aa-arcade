@@ -176,8 +176,16 @@ add_library(spindle_platform STATIC
   src/menus/screens/Attract.cpp
   src/menus/screens/Lobby.cpp
   src/menus/screens/Results.cpp
-  src/menus/ServiceMenu.cpp)
+  src/menus/ServiceMenu.cpp
+  src/engine/Haptics.cpp)
 target_link_libraries(spindle_platform PUBLIC spindle_core SDL3::SDL3)
+if(IOS)
+  # iPhone haptics come from UIKit (SDL has none there).
+  enable_language(OBJCXX)
+  target_sources(spindle_platform PRIVATE src/engine/ios/HapticsIos.mm)
+  set_source_files_properties(src/engine/ios/HapticsIos.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc;-Wno-pedantic")
+  target_link_libraries(spindle_platform PUBLIC "-framework UIKit")
+endif()
 if(WIN32)
   target_link_libraries(spindle_platform PUBLIC winhttp)
 endif()

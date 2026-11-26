@@ -171,6 +171,11 @@ void visitAll(Settings& s, V& v) {
     v.integer("exit_hold_seconds", s.arcade.exitHoldSeconds, 0, 10, "hold the exit key this long to quit; 0 = locked cabinet (service menu only)");
     v.integer("initials_seconds", s.arcade.initialsSeconds, 10, 30, "seconds a player has to shoot their initials into the high score table");
 
+    v.section("Feedback", "Vibration on phones and rumble on gamepads.");
+    v.boolean("vibration", s.feedback.vibration, "1 = phones vibrate (needles, fails, fire, clears, the crown, the round end screen)");
+    v.integer("strength", s.feedback.strength, 0, 100, "how strong vibration and rumble are (phones without strength control only vary the length)");
+    v.boolean("gamepad_rumble", s.feedback.gamepadRumble, "1 = gamepads rumble for their own station's moments");
+
     v.section("Accessibility", "Easier to read, easier on the eyes.");
     v.boolean("accent_colors", s.accessibility.accentColors, "1 = each station gets its own colour (P1 cyan, P2 pink, P3 green, P4 orange)");
     v.boolean("reduce_flashes", s.accessibility.reduceFlashes, "1 = softer fail flashes and no shaking");

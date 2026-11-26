@@ -104,7 +104,8 @@ enum class MatchEventType {
     Burned,         // station, value = needles burnt away this tick
     RoundScored,    // station, value = round points (one per player in the round, at its end)
     CrownTaken,     // station, value = previous holder (-1 = nobody)
-    CrownLost       // station: the holder was knocked out
+    CrownLost,      // station: the holder was knocked out
+    CloseCall       // station: a needle stuck close to another
 };
 
 struct MatchEvent {

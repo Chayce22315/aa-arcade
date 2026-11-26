@@ -106,6 +106,23 @@ void ArcadeMachine::sound(audio::SoundId id, bool demo) {
     events_.push_back({ArcadeEventType::Sound, id, -1});
 }
 
+void ArcadeMachine::haptic(HapticKind kind, int station, bool demo) {
+    if (demo || station >= gameplay::kMaxStations) return;
+    if (station < 0) { // every human station
+        for (int s = 0; s < gameplay::kMaxStations; ++s) haptic(kind, s);
+        return;
+    }
+    // On the vote screen the match's line-up does not exist yet: joined stations are the humans.
+    const auto i = static_cast<std::size_t>(station);
+    const bool human = state_ == ArcadeState::Vote ? joined_[i] : lineup_.seats[i] == players::SeatKind::Human;
+    if (!human) return;
+    ArcadeEvent e;
+    e.type = ArcadeEventType::Haptic;
+    e.station = station;
+    e.haptic = kind;
+    events_.push_back(e);
+}
+
 std::vector<ArcadeEvent> ArcadeMachine::takeEvents() {
     std::vector<ArcadeEvent> out;
     out.swap(events_);
@@ -279,6 +296,7 @@ void ArcadeMachine::tickEntries(const ArcadeInput& input, double dt) {
         if (!e || e->done()) continue;
         const int shotsBefore = e->shots();
         e->tick(input.stations[static_cast<std::size_t>(s)], dt);
+        if (e->shots() != shotsBefore) haptic(HapticKind::Letter, s);
         if (e->shots() != shotsBefore && !e->done()) sound(audio::SoundId::LetterShot);
         if (e->done()) {
             highScores_.finish(e->token(), e->name());
@@ -372,6 +390,7 @@ void ArcadeMachine::tickVote(const ArcadeInput& input, double dt) {
             if (steps != 0 && vote_.modes().size() > 1) {
                 vote_.move(s, steps);
                 sound(audio::SoundId::VoteTick);
+                haptic(HapticKind::Select, s);
             }
             if (st.firePresses > 0 || st.startPressed) {
                 if (vote_.modes().size() == 1) { // one mode on: pressing again simply starts
@@ -380,6 +399,7 @@ void ArcadeMachine::tickVote(const ArcadeInput& input, double dt) {
                 }
                 vote_.cast(s);
                 sound(audio::SoundId::VoteCast);
+                haptic(HapticKind::Select, s);
             }
         }
         if (votePhase_ != VotePhase::Voting) break;
@@ -437,7 +457,10 @@ void ArcadeMachine::tallySounds(bool demo) {
             if (e >= t.digitLand(k)) ++landed;
         constexpr audio::SoundId kTicks[] = {audio::SoundId::TallyTick1, audio::SoundId::TallyTick2, audio::SoundId::TallyTick3,
                                              audio::SoundId::TallyTick4};
-        for (; tallyTicks_ < landed; ++tallyTicks_) sound(kTicks[std::min(tallyTicks_, 3)], demo);
+        for (; tallyTicks_ < landed; ++tallyTicks_) {
+            sound(kTicks[std::min(tallyTicks_, 3)], demo);
+            haptic(HapticKind::Digit, -1, demo);
+        }
         if (!tallyDone_ && e >= t.breakdownStart()) {
             tallyDone_ = true;
             sound(audio::SoundId::TallyDone, demo);
@@ -447,6 +470,7 @@ void ArcadeMachine::tallySounds(bool demo) {
     if (!tallyCrown_ && e >= t.crownStart() && holder >= 0 && holder != match_->crownBefore()) {
         tallyCrown_ = true;
         sound(audio::SoundId::Crown, demo);
+        haptic(HapticKind::Crown, holder, demo);
     }
 }
 
@@ -472,14 +496,27 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
                 if (b) b->beginRound(match_->mutator() == gameplay::Mutator::Blind);
             sound(audio::SoundId::RoundStart, demo);
             break;
-        case gameplay::MatchEventType::NeedlePlaced: sound(audio::SoundId::NeedleHit, demo); break;
-        case gameplay::MatchEventType::StationFailed: sound(audio::SoundId::Fail, demo); break;
-        case gameplay::MatchEventType::StationCleared: sound(audio::SoundId::Clear, demo); break;
+        case gameplay::MatchEventType::NeedlePlaced:
+            sound(audio::SoundId::NeedleHit, demo);
+            haptic(HapticKind::Tick, e.station, demo);
+            break;
+        case gameplay::MatchEventType::CloseCall: haptic(HapticKind::CloseCall, e.station, demo); break;
+        case gameplay::MatchEventType::StationFailed:
+            sound(audio::SoundId::Fail, demo);
+            haptic(HapticKind::Fail, e.station, demo);
+            break;
+        case gameplay::MatchEventType::StationCleared:
+            sound(audio::SoundId::Clear, demo);
+            haptic(HapticKind::Clear, e.station, demo);
+            break;
         case gameplay::MatchEventType::Winner: sound(audio::SoundId::Winner, demo); break;
         case gameplay::MatchEventType::NoWinner: sound(audio::SoundId::Fail, demo); break;
         case gameplay::MatchEventType::PowerupClaimed: sound(audio::SoundId::Powerup, demo); break;
         case gameplay::MatchEventType::ShieldBroke: sound(audio::SoundId::Shield, demo); break;
-        case gameplay::MatchEventType::Ignited: sound(audio::SoundId::Ignite, demo); break;
+        case gameplay::MatchEventType::Ignited:
+            sound(audio::SoundId::Ignite, demo);
+            haptic(HapticKind::Fire, e.station, demo);
+            break;
         case gameplay::MatchEventType::Burned: sound(audio::SoundId::Burn, demo); break;
         case gameplay::MatchEventType::Eliminated:
             // A knocked-out player may have a high score: they shoot their initials once this round's

@@ -22,6 +22,9 @@ struct Paths {
     // Optional operator overrides of the embedded scripts.
     std::filesystem::path levelScriptOverride() const { return base / "data" / "scripts" / "levels.lua"; }
     std::filesystem::path botScriptOverride() const { return base / "data" / "scripts" / "bots" / "bot.lua"; }
+    // The same overrides in the writable folder (the only place a phone user can put files).
+    std::filesystem::path levelScriptUser() const { return writable / "scripts" / "levels.lua"; }
+    std::filesystem::path botScriptUser() const { return writable / "scripts" / "bot.lua"; }
 };
 
 // root, when given, replaces both folders (used by --root and the self-test).

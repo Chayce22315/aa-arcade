@@ -6,6 +6,8 @@
 //  5 detect the display resolution            10 enter attract mode
 
 #include <format>
+#include <filesystem>
+#include <optional>
 #include <random>
 
 #include "assets/ControllerDbPin.hpp"
@@ -141,14 +143,20 @@ bool App::bootLoad() {
     } else {
         log::info("assets: using SDL's built-in controller mappings");
     }
-    if (auto text = config::readFile(paths_.levelScriptOverride()))
-        levelOverride_ = gameplay::ScriptSource{*text, pathToUtf8(paths_.levelScriptOverride())};
+    for (const auto& path : {paths_.levelScriptOverride(), paths_.levelScriptUser()})
+        if (auto text = config::readFile(path)) {
+            levelOverride_ = gameplay::ScriptSource{*text, pathToUtf8(path)};
+            break;
+        }
     levels_ = std::make_unique<gameplay::LevelScript>(levelOverride_);
     if (!levels_->embeddedHealthy()) log::error("levels: built-in script broken; emergency rounds in use");
 
     botSource_ = bots::BotBrain::embeddedSource();
-    if (auto text = config::readFile(paths_.botScriptOverride())) {
-        gameplay::ScriptSource candidate{*text, pathToUtf8(paths_.botScriptOverride())};
+    std::optional<std::filesystem::path> botPath;
+    for (const auto& path : {paths_.botScriptOverride(), paths_.botScriptUser()})
+        if (std::error_code ec; !botPath && std::filesystem::exists(path, ec)) botPath = path;
+    if (auto text = botPath ? config::readFile(*botPath) : std::nullopt) {
+        gameplay::ScriptSource candidate{*text, pathToUtf8(*botPath)};
         std::string err;
         if (bots::BotBrain::create(candidate, config::Difficulty::Normal, 1, &err)) {
             botSource_ = std::move(candidate);
@@ -212,6 +220,8 @@ bool App::bootArcade() {
     std::string err;
     if (!audio_.open(&err)) log::warn("audio: {}; running silent", err);
     audio_.setVolumes(settings_.audio);
+    haptics_.configure(settings_.feedback);
+    haptics_.open(input_.devices());
 
     arcade::Bookkeeping bk;
     if (auto text = config::readFile(paths_.bookkeeping())) bk = arcade::Bookkeeping::parse(config::IniDocument::parse(*text));

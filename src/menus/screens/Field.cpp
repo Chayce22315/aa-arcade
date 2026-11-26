@@ -284,7 +284,8 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
         look.fg = stationColor(c, s);
         if (out) look.fg = colors::kOut;
         look.rainbow = !out && m.crownHolder() == s && !tally;
-        std::string kind = bot ? "cpu" : "player";
+        const bots::BotController* brain = bot ? c.arcade.bot(s) : nullptr;
+        std::string kind = bot ? (brain ? brain->brain().name() : std::string("cpu")) : "player";
         if (p->team >= 0) kind += std::format("  team {}", p->team + 1);
         drawStationHeader(c, s, kind, out ? colors::kOut : colors::kWhite);
         if (m.mode().knockouts || m.mode().teams) drawTries(c, s, *p, m.maxTries(), now);

@@ -228,3 +228,21 @@ TEST_CASE(bots_finish_a_match_with_one_winner_in_every_mode) {
         if (m.standings().front() != m.winnerStation()) test::fail(__FILE__, __LINE__, what + ": the winner is not first in the standings");
     }
 }
+
+TEST_CASE(bots_get_a_name_from_their_pool) {
+    auto a = makeBot(config::Difficulty::Easy, 0);
+    auto b = makeBot(config::Difficulty::Easy, 1);
+    auto e = makeBot(config::Difficulty::Expert, 0);
+    REQUIRE(a && b && e);
+    CHECK(a->brain().name() != "cpu");
+    CHECK(a->brain().name() != b->brain().name()); // the seed picks
+    CHECK(a->brain().name() != e->brain().name()); // pools per difficulty
+    CHECK(a->brain().name().size() <= 10);
+    // A script without names keeps "cpu".
+    std::string err;
+    const gameplay::ScriptSource plain{
+        "profiles = { normal = { reaction = 0.2 } }\nfunction decide(obs, profile, memory) return false end\n", "test"};
+    auto c = bots::BotBrain::create(plain, config::Difficulty::Normal, 3, &err);
+    REQUIRE(c != nullptr);
+    CHECK_EQ(c->name(), std::string("cpu"));
+}

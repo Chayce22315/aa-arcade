@@ -240,6 +240,7 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
             if (!pl.closeCall) continue;
             ++p->closeCalls;
             p->closeCallTick = tick_;
+            emit(MatchEventType::CloseCall, s);
             // Sabotage: every third close call in a round sends junk to the rivals.
             if (config_.mode.junk && !suddenDeath_ && ++closeCallsThisRound_[static_cast<std::size_t>(s)] % kCloseCallsPerJunk == 0)
                 sendJunk(s, 1);

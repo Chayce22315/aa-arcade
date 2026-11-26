@@ -132,6 +132,13 @@ struct Settings {
         bool operator==(const Assets&) const = default;
     } assets;
 
+    struct Feedback {
+        bool vibration = true;     // phones: buzz on needles, fails, fire, the crown...
+        int strength = 70;         // 0..100, for phones and gamepads
+        bool gamepadRumble = true; // gamepads rumble for their own station
+        bool operator==(const Feedback&) const = default;
+    } feedback;
+
     struct Accessibility {
         bool accentColors = false; // each station gets its own colour
         bool reduceFlashes = false; // softer fail flashes, no shaking
