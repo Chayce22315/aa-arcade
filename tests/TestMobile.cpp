@@ -137,7 +137,7 @@ TEST_CASE(arcade_background_suspends_the_match_until_a_player_presses) {
     gameplay::LevelScript levels;
     config::Settings s = config::Settings::mobileDefaults();
     s.gameplay.seed = 77;
-    s.arcade.joinWindow = 3;
+    s.arcade.voteSeconds = 10;
     s.bots.singleplayerBots = 3;
     arcade::ArcadeMachine m(s, levels, factory(), {}, 1);
     m.suspend(); // nothing to suspend in attract
@@ -145,8 +145,9 @@ TEST_CASE(arcade_background_suspends_the_match_until_a_player_presses) {
     arcade::ArcadeInput start;
     start.stations[1].startPressed = true; // free play: a tap joins
     m.tick(start);
-    REQUIRE(m.state() == arcade::ArcadeState::Join);
-    m.tick(start); // tapping again starts at once
+    REQUIRE(m.state() == arcade::ArcadeState::Vote);
+    m.tick(start); // tapping again votes for the card under the cursor (battle)
+    for (int i = 0; i < 20 * kSecond && m.state() == arcade::ArcadeState::Vote; ++i) m.tick({});
     REQUIRE(m.state() == arcade::ArcadeState::Playing);
     for (int i = 0; i < 3 * kSecond; ++i) m.tick({});
     m.suspend();
@@ -188,4 +189,14 @@ TEST_CASE(touch_initials_thirds_in_the_column_or_the_whole_screen) {
     CHECK(input::touchHit(mixed, 0.1f, 0.5f)->action == Action::Fire);
     CHECK_EQ(input::touchHit(mixed, 0.1f, 0.5f)->station, 0);
     CHECK(!input::touchHit(mixed, 0.3f, 0.5f).has_value()); // a bot's column
+}
+
+TEST_CASE(touch_vote_screen_joined_columns_pick_and_vote) {
+    TouchContext c; // lobby
+    c.voting = {false, true, false, false};
+    CHECK(input::touchHit(c, 0.1f, 0.5f)->action == Action::Start); // not joined: a tap joins
+    CHECK(input::touchHit(c, 0.27f, 0.5f)->action == Action::Left);
+    CHECK(input::touchHit(c, 0.375f, 0.5f)->action == Action::Fire); // middle third votes
+    CHECK(input::touchHit(c, 0.48f, 0.5f)->action == Action::Right);
+    CHECK_EQ(input::touchHit(c, 0.48f, 0.5f)->station, 1);
 }

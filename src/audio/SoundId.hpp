@@ -27,6 +27,11 @@ enum class SoundId {
     Crown,
     LetterShot,
     InitialsDone,
+    VoteTick,
+    VoteCast,
+    WheelTick,
+    WheelStop,
+    ModeIntro,
     Count
 };
 enum class SoundCategory { Sfx, Ui };
@@ -60,6 +65,11 @@ inline constexpr std::array<SoundInfo, static_cast<std::size_t>(SoundId::Count)>
     {SoundId::Crown, "audio/crown.wav", SoundCategory::Sfx, "crown"},
     {SoundId::LetterShot, "audio/letter_shot.wav", SoundCategory::Ui, "letter shot"},
     {SoundId::InitialsDone, "audio/initials_done.wav", SoundCategory::Ui, "initials saved"},
+    {SoundId::VoteTick, "audio/vote_tick.wav", SoundCategory::Ui, "vote tick"},
+    {SoundId::VoteCast, "audio/vote_cast.wav", SoundCategory::Ui, "vote cast"},
+    {SoundId::WheelTick, "audio/wheel_tick.wav", SoundCategory::Ui, "wheel tick"},
+    {SoundId::WheelStop, "audio/wheel_stop.wav", SoundCategory::Ui, "wheel stop"},
+    {SoundId::ModeIntro, "audio/mode_intro.wav", SoundCategory::Ui, "mode intro"},
 }};
 
 } // namespace spindle::audio

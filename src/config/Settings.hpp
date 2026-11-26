@@ -84,12 +84,18 @@ struct Settings {
         int creditsPerCoin = 1;
         int creditsPerGame = 1;
         int maxCredits = 99;
-        int joinWindow = 10;
+        int voteSeconds = 30; // the join + game mode vote screen
         int gameOverTime = 8;
         int exitHoldSeconds = 2;
         int initialsSeconds = 15;
         bool operator==(const Arcade&) const = default;
     } arcade;
+
+    // Game modes players can vote for, in the order of gameplay::kAllModes (battle ... daily).
+    struct Modes {
+        std::array<bool, 9> enabled{true, true, true, true, true, true, true, true, true};
+        bool operator==(const Modes&) const = default;
+    } modes;
 
     std::array<StationKeys, kStationCount> stationKeys{{{"LCtrl", "1", "W", "D"}, {"A", "2", "J", "K"}, {"RCtrl", "3", "Left", "Right"}, {"L", "4", "F", "H"}}};
 

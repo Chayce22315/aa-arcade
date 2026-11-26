@@ -155,6 +155,8 @@ bool BotBrain::decide(const BotView& v) {
     setInteger(L, obs, "revision", v.revision);
     lua_pushboolean(L, v.fireEnabled ? 1 : 0);
     lua_setfield(L, obs, "fire_enabled");
+    lua_pushboolean(L, v.blind ? 1 : 0);
+    lua_setfield(L, obs, "blind");
     lua_pushboolean(L, v.onFire ? 1 : 0);
     lua_setfield(L, obs, "on_fire");
     setNumber(L, obs, "fire_left", v.fireLeft);

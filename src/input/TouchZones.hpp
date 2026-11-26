@@ -10,7 +10,7 @@
 namespace spindle::input {
 
 enum class TouchScreen {
-    Lobby,   // attract, insert coin, join, game over: a tap is that column's start
+    Lobby,   // attract, insert coin, vote, game over: a tap is that column's start (or vote controls)
     Playing, // a tap fires for the human playing that column (anywhere, when only one human plays)
     Ignore   // the service menu handles its own taps
 };
@@ -19,6 +19,7 @@ struct TouchContext {
     TouchScreen screen = TouchScreen::Lobby;
     std::array<bool, 4> humans{};      // stations still playing the match, played by humans (Playing)
     std::array<bool, 4> entering{};    // stations shooting their initials (Playing): left / shoot / right thirds
+    std::array<bool, 4> voting{};      // joined stations on the vote screen (Lobby): left / vote / right thirds
     std::array<float, 5> columnEdges{0.0f, 0.25f, 0.5f, 0.75f, 1.0f}; // normalized x of the column borders
 };
 

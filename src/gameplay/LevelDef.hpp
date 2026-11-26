@@ -17,6 +17,7 @@ struct LevelDef {
     int launchCount = 0;         // needles each player must place
     RotationProgram rotation;    // before Gameplay.rotation_speed_scale is applied
     std::vector<Pickup> pickups; // powerup rings on the circle (relative angles)
+    int junk = 0;                // sabotage: the last `junk` prepins were sent by rivals (one station only)
 };
 
 struct LevelLimits {

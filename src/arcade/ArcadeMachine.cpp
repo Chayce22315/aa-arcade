@@ -19,7 +19,7 @@ const char* arcadeStateName(ArcadeState s) {
     switch (s) {
     case ArcadeState::Attract: return "attract";
     case ArcadeState::InsertCoin: return "insert coin";
-    case ArcadeState::Join: return "join";
+    case ArcadeState::Vote: return "vote";
     case ArcadeState::Playing: return "playing";
     case ArcadeState::Initials: return "initials";
     case ArcadeState::GameOver: return "game over";
@@ -40,9 +40,17 @@ void ArcadeMachine::applySettings(const config::Settings& settings) {
     updatePause();
 }
 
-double ArcadeMachine::joinTimeLeft() const {
-    if (state_ != ArcadeState::Join) return 0.0;
-    return std::max(0.0, settings_.arcade.joinWindow - stateTime_);
+double ArcadeMachine::voteTimeLeft() const {
+    if (state_ != ArcadeState::Vote || votePhase_ != VotePhase::Voting) return 0.0;
+    return vote_.timeLeft();
+}
+
+std::vector<gameplay::ModeId> ArcadeMachine::enabledModes() const {
+    std::vector<gameplay::ModeId> out;
+    for (std::size_t m = 0; m < gameplay::kModeCount; ++m)
+        if (settings_.modes.enabled[m]) out.push_back(gameplay::kAllModes[m]);
+    if (out.empty()) out.push_back(gameplay::ModeId::Battle); // every mode off: battle stays on
+    return out;
 }
 
 double ArcadeMachine::gameOverTimeLeft() const {
@@ -112,12 +120,12 @@ void ArcadeMachine::enter(ArcadeState s) {
         match_.reset();
         for (auto& b : bots_) b.reset();
     }
-    if (s == ArcadeState::Attract || s == ArcadeState::InsertCoin || s == ArcadeState::Join) {
+    if (s == ArcadeState::Attract || s == ArcadeState::InsertCoin || s == ArcadeState::Vote) {
         for (auto& e : entries_) e.reset();
         entryPending_.fill(false);
         entryChecked_.fill(false);
     }
-    if (s == ArcadeState::Attract || s == ArcadeState::Join || s == ArcadeState::InsertCoin) {
+    if (s == ArcadeState::Attract || s == ArcadeState::Vote || s == ArcadeState::InsertCoin) {
         joined_.fill(false);
         disconnected_.fill(false);
     }
@@ -135,8 +143,9 @@ void ArcadeMachine::enterAttractPage(AttractPage p) {
     }
 }
 
-gameplay::MatchConfig ArcadeMachine::matchConfig(bool demo) {
+gameplay::MatchConfig ArcadeMachine::matchConfig(bool demo, gameplay::ModeId mode) {
     gameplay::MatchConfig c;
+    c.mode = gameplay::modeRules(mode);
     c.tries = demo ? 1 : settings_.gameplay.tries;
     c.roundTimeLimit = settings_.gameplay.roundTimeLimit;
     c.readyDelay = settings_.gameplay.readyDelay;
@@ -154,12 +163,17 @@ gameplay::MatchConfig ArcadeMachine::matchConfig(bool demo) {
     case config::RoundEndScreen::Short: c.tally = gameplay::scoring::TallyStyle::Short; break;
     case config::RoundEndScreen::Off: c.tally = gameplay::scoring::TallyStyle::Off; break;
     }
+    // Daily: everyone gets the same levels today, whatever the operator's seed.
+    if (c.mode.dailySeed && !demo) c.seed = gameplay::dailySeed(highScores_.today());
     return c;
 }
 
 void ArcadeMachine::startDemo() {
+    // Each demo shows off one of the enabled modes.
+    const auto modes = enabledModes();
+    currentMode_ = modes[static_cast<std::size_t>(rng_.range(0, static_cast<std::int64_t>(modes.size()) - 1))];
     lineup_ = players::demoLineup();
-    match_ = std::make_unique<gameplay::Match>(matchConfig(true), lineup_.participants(), levels_);
+    match_ = std::make_unique<gameplay::Match>(matchConfig(true, currentMode_), lineup_.participants(), levels_);
     for (int s = 0; s < gameplay::kMaxStations; ++s)
         bots_[static_cast<std::size_t>(s)] =
             botFactory_ ? botFactory_(settings_.bots.demoDifficulty, (static_cast<std::uint64_t>(rng_.next()) << 8) | static_cast<std::uint64_t>(s)) : nullptr;
@@ -167,10 +181,12 @@ void ArcadeMachine::startDemo() {
     updatePause();
 }
 
-void ArcadeMachine::startMatch() {
+void ArcadeMachine::startMatch(gameplay::ModeId mode) {
+    currentMode_ = mode;
     players::BotFill fill{settings_.bots.singleplayerBots, settings_.bots.multiplayerBots};
+    fill.fillAll = gameplay::modeRules(mode).teams; // teams always seats four
     lineup_ = players::buildLineup(joined_, fill);
-    match_ = std::make_unique<gameplay::Match>(matchConfig(false), lineup_.participants(), levels_);
+    match_ = std::make_unique<gameplay::Match>(matchConfig(false, mode), lineup_.participants(), levels_);
     for (int s = 0; s < gameplay::kMaxStations; ++s) {
         auto& b = bots_[static_cast<std::size_t>(s)];
         b.reset();
@@ -183,8 +199,8 @@ void ArcadeMachine::startMatch() {
         ++bookkeeping_.gamesMultiplayer;
     else
         ++bookkeeping_.gamesSingleplayer;
-    log::info("arcade: {} match started: {} human(s), {} bot(s), seed {}", players::gameModeName(lineup_.mode), lineup_.humans,
-              lineup_.bots, match_->config().seed);
+    log::info("arcade: {} {} match started: {} human(s), {} bot(s), seed {}", gameplay::modeKey(mode), players::gameModeName(lineup_.mode),
+              lineup_.humans, lineup_.bots, match_->config().seed);
     matchSeconds_ = 0.0;
     lastResult_.reset();
     for (auto& e : entries_) e.reset();
@@ -208,7 +224,10 @@ void ArcadeMachine::endMatch() {
         if (const auto& p = match_->participant(s)) {
             r.roundsCleared[static_cast<std::size_t>(s)] = p->roundsCleared;
             r.scores[static_cast<std::size_t>(s)] = p->score;
+            r.points[static_cast<std::size_t>(s)] = match_->modePoints(s);
         }
+    r.gameMode = currentMode_;
+    r.winningTeam = match_->winningTeam();
     if (r.winner >= 0) {
         const bool bot = lineup_.seats[static_cast<std::size_t>(r.winner)] == players::SeatKind::Bot;
         bookkeeping_.addWinner({r.winner, bot, r.finalRound});
@@ -247,7 +266,7 @@ void ArcadeMachine::startEntry(int station) {
     entryChecked_[i] = true;
     const int round = p->eliminated ? p->eliminatedRound : match_->round();
     const std::string fallback = std::format("P{}", station + 1);
-    const std::uint32_t token = highScores_.reserve(scoreTable(), p->score, round, fallback);
+    const std::uint32_t token = highScores_.reserve(scoreTable(), p->score, round, fallback, gameplay::modeRules(currentMode_).todayOnly);
     if (token == 0) return;
     entries_[i].emplace(station, token, static_cast<double>(settings_.arcade.initialsSeconds), fallback);
     events_.push_back({ArcadeEventType::SaveHighScores, audio::SoundId::Coin, station}); // the row is held under the fallback name
@@ -292,17 +311,113 @@ void ArcadeMachine::handleCoins(const ArcadeInput& input) {
 
 void ArcadeMachine::tryJoin(int station) {
     const auto i = static_cast<std::size_t>(station);
-    if (state_ == ArcadeState::Join && joined_[i]) return;
+    if (state_ == ArcadeState::Vote && (joined_[i] || votePhase_ != VotePhase::Voting)) return;
     if (!credits_.canJoin()) {
         needCoin_[i] = 1.5;
         events_.push_back({ArcadeEventType::JoinRefused, audio::SoundId::MenuMove, station});
         return;
     }
-    if (state_ != ArcadeState::Join) enter(ArcadeState::Join);
+    if (state_ != ArcadeState::Vote) enterVote();
     credits_.payForJoin();
     joined_[i] = true;
+    vote_.join(station);
     sound(audio::SoundId::Join);
     log::info("arcade: station {} joined", station + 1);
+}
+
+void ArcadeMachine::enterVote() {
+    enter(ArcadeState::Vote);
+    vote_ = VoteBox(enabledModes(), static_cast<double>(settings_.arcade.voteSeconds));
+    votePhase_ = VotePhase::Voting;
+    votePhaseTime_ = 0.0;
+    wheel_.clear();
+    for (auto& h : voteLeft_) h.reset();
+    for (auto& h : voteRight_) h.reset();
+}
+
+void ArcadeMachine::startIntro() {
+    votePhase_ = VotePhase::Intro;
+    votePhaseTime_ = 0.0;
+    sound(audio::SoundId::ModeIntro);
+    log::info("arcade: game mode {}", gameplay::modeKey(chosenMode_));
+}
+
+void ArcadeMachine::finishVote() {
+    const std::vector<int> leaders = vote_.leaders();
+    if (leaders.size() == 1) {
+        chosenMode_ = vote_.modes()[static_cast<std::size_t>(leaders.front())];
+        startIntro();
+        return;
+    }
+    // A tie (or nobody voted): the tied modes go on the wheel as equal slices.
+    wheel_ = leaders;
+    wheelResult_ = static_cast<int>(rng_.range(0, static_cast<std::int64_t>(wheel_.size()) - 1));
+    wheelSlice_ = wheelSliceAt(0.0, static_cast<int>(wheel_.size()));
+    votePhase_ = VotePhase::Spin;
+    votePhaseTime_ = 0.0;
+    log::info("arcade: vote tied between {} modes - spinning the wheel", wheel_.size());
+}
+
+void ArcadeMachine::tickVote(const ArcadeInput& input, double dt) {
+    switch (votePhase_) {
+    case VotePhase::Voting:
+        for (int s = 0; s < gameplay::kMaxStations && votePhase_ == VotePhase::Voting; ++s) {
+            const auto i = static_cast<std::size_t>(s);
+            const StationButtons& st = input.stations[i];
+            if (!vote_.joined(s)) {
+                if (st.startPressed) tryJoin(s);
+                continue;
+            }
+            const int steps = voteRight_[i].update(st.rightPresses, st.rightHeld, dt) - voteLeft_[i].update(st.leftPresses, st.leftHeld, dt);
+            if (steps != 0 && vote_.modes().size() > 1) {
+                vote_.move(s, steps);
+                sound(audio::SoundId::VoteTick);
+            }
+            if (st.firePresses > 0 || st.startPressed) {
+                if (vote_.modes().size() == 1) { // one mode on: pressing again simply starts
+                    finishVote();
+                    break;
+                }
+                vote_.cast(s);
+                sound(audio::SoundId::VoteCast);
+            }
+        }
+        if (votePhase_ != VotePhase::Voting) break;
+        vote_.tick(dt);
+        if (vote_.expired()) finishVote();
+        break;
+    case VotePhase::Spin: {
+        votePhaseTime_ += dt;
+        const int n = static_cast<int>(wheel_.size());
+        const int slice = wheelSliceAt(wheelAngle(votePhaseTime_, n, wheelResult_), n);
+        if (slice != wheelSlice_) {
+            wheelSlice_ = slice;
+            sound(audio::SoundId::WheelTick);
+        }
+        if (votePhaseTime_ >= VoteBox::kSpinSeconds) {
+            sound(audio::SoundId::WheelStop);
+            chosenMode_ = vote_.modes()[static_cast<std::size_t>(wheel_[static_cast<std::size_t>(wheelResult_)])];
+            startIntro();
+        }
+        break;
+    }
+    case VotePhase::Intro:
+        votePhaseTime_ += dt;
+        if (votePhaseTime_ >= VoteBox::kIntroSeconds) startMatch(chosenMode_);
+        break;
+    }
+}
+
+bool ArcadeMachine::nextAttractTable() {
+    for (std::size_t k = 1; k <= gameplay::kModeCount; ++k) {
+        const std::size_t m = (static_cast<std::size_t>(attractTable_) + k) % gameplay::kModeCount;
+        const auto& t = highScores_.tables(kScoreTables[m]);
+        if (!t.allTime.empty() || !t.today.empty()) {
+            attractTable_ = static_cast<int>(m);
+            return true;
+        }
+    }
+    return false;
 }
 
 // The round end screen's sounds, on the core's timeline: a rising tick per digit, a chord when the
@@ -354,7 +469,7 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
         switch (e.type) {
         case gameplay::MatchEventType::RoundStarted:
             for (auto& b : bots_)
-                if (b) b->beginRound();
+                if (b) b->beginRound(match_->mutator() == gameplay::Mutator::Blind);
             sound(audio::SoundId::RoundStart, demo);
             break;
         case gameplay::MatchEventType::NeedlePlaced: sound(audio::SoundId::NeedleHit, demo); break;
@@ -398,7 +513,7 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
             tickMatch(input, true);
             if (match_ && match_->over()) demoOverTime_ += dt;
             if (demoOverTime_ >= kDemoEndHold || pageTime_ >= kDemoMaxTime)
-                enterAttractPage(highScores_.anyEntries() ? AttractPage::HighScores : AttractPage::Title);
+                enterAttractPage(nextAttractTable() ? AttractPage::HighScores : AttractPage::Title);
             break;
         case AttractPage::HighScores:
             if (pageTime_ >= kHighScoresTime) enterAttractPage(AttractPage::Title);
@@ -406,8 +521,8 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
         }
         for (int s = 0; s < gameplay::kMaxStations && state_ == ArcadeState::Attract; ++s)
             if (input.stations[static_cast<std::size_t>(s)].startPressed) tryJoin(s);
-        // A start that opened the join window may be followed by others in the same tick.
-        if (state_ == ArcadeState::Join)
+        // A start that opened the vote screen may be followed by others in the same tick.
+        if (state_ == ArcadeState::Vote)
             for (int s = 0; s < gameplay::kMaxStations; ++s)
                 if (input.stations[static_cast<std::size_t>(s)].startPressed && !joined_[static_cast<std::size_t>(s)]) tryJoin(s);
         break;
@@ -416,7 +531,7 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
     case ArcadeState::GameOver: {
         for (int s = 0; s < gameplay::kMaxStations; ++s) {
             if (!input.stations[static_cast<std::size_t>(s)].startPressed) continue;
-            if (state_ == ArcadeState::Join && joined_[static_cast<std::size_t>(s)]) continue;
+            if (state_ == ArcadeState::Vote && joined_[static_cast<std::size_t>(s)]) continue;
             tryJoin(s);
         }
         if (state_ == ArcadeState::InsertCoin && stateTime_ >= kInsertCoinIdle) enter(ArcadeState::Attract);
@@ -426,20 +541,7 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
         }
         break;
     }
-    case ArcadeState::Join: {
-        for (int s = 0; s < gameplay::kMaxStations && state_ == ArcadeState::Join; ++s) {
-            if (!input.stations[static_cast<std::size_t>(s)].startPressed) continue;
-            if (joined_[static_cast<std::size_t>(s)])
-                startMatch();
-            else
-                tryJoin(s);
-        }
-        if (state_ == ArcadeState::Join) {
-            const bool full = std::all_of(joined_.begin(), joined_.end(), [](bool j) { return j; });
-            if (full || stateTime_ >= settings_.arcade.joinWindow) startMatch();
-        }
-        break;
-    }
+    case ArcadeState::Vote: tickVote(input, dt); break;
     case ArcadeState::Playing: {
         if (suspended_) {
             // Any human start or fire resumes; that press is used up waking the match.

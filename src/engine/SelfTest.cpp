@@ -31,7 +31,8 @@ config::Settings SelfTest::adjustSettings(config::Settings s) {
     s.gameplay.fireMeter = true;
     s.gameplay.fireCombo = 4;
     s.gameplay.fireChainWindow = 2.0;
-    s.arcade.joinWindow = 3;
+    s.arcade.voteSeconds = 10;
+    s.modes = config::Settings::defaults().modes; // every mode on: the script votes battle where it needs it
     s.arcade.gameOverTime = 3;
     s.display.fullscreen = config::FullscreenMode::Windowed;
     s.display.resolution = config::Resolution{false, 1280, 720};
@@ -129,6 +130,14 @@ void SelfTest::pressStart(int station) {
         Controller* pc = &c;
         releases_.push_back({1, [this, pc] { setButton(*pc, pc->startButton, false); }});
     }
+}
+
+void SelfTest::pressButton(int station, int button) {
+    Controller& c = ctl_[static_cast<std::size_t>(station)];
+    if (!c.joystick) return;
+    setButton(c, button, true);
+    Controller* pc = &c;
+    releases_.push_back({1, [this, pc, button] { setButton(*pc, button, false); }});
 }
 
 bool SelfTest::attachPad(int station, Uint16 vendor, Uint16 product, const char* name) {
@@ -286,10 +295,11 @@ void SelfTest::build() {
         add(tag + ": insert 2 coins", taps(SDL_SCANCODE_5, 2));
         waitFor(tag + ": 2 credits", [A] { return A().credits().credits() == 2; });
         add(tag + ": P1 start", [this] { tapKey(SDL_SCANCODE_1); return true; });
-        waitFor(tag + ": P1 joined", [A] { return A().state() == ArcadeState::Join && A().joined()[0]; });
+        waitFor(tag + ": P1 joined", [A] { return A().state() == ArcadeState::Vote && A().joined()[0]; });
         add(tag + ": P2 start", [this] { tapKey(SDL_SCANCODE_2); return true; });
         waitFor(tag + ": P2 joined", [A] { return A().joined()[1]; });
-        add(tag + ": P1 start again begins the match", [this] { tapKey(SDL_SCANCODE_1); return true; });
+        add(tag + ": P1 and P2 vote battle (fire)", taps(SDL_SCANCODE_LCTRL, 1));
+        add(tag + ": P2 votes too", taps(SDL_SCANCODE_A, 1));
         waitFor(tag + ": multiplayer, 2 humans, 0 bots", [A] {
             return A().state() == ArcadeState::Playing && A().lineup().mode == players::GameMode::Multiplayer && A().lineup().humans == 2 &&
                    A().lineup().bots == 0;
@@ -339,7 +349,7 @@ void SelfTest::build() {
         return true;
     });
     add("join: P1 presses start on the keyboard", [this] { tapKey(SDL_SCANCODE_1); return true; });
-    waitFor("join: P1 joined", [A] { return A().state() == ArcadeState::Join && A().joined()[0]; });
+    waitFor("join: P1 joined", [A] { return A().state() == ArcadeState::Vote && A().joined()[0]; });
     add("join: start on the xbox pad", [this] { pressStart(1); return true; });
     waitFor("join: xbox pad claimed station 2", [this, A] {
         const auto* d = app_.inputSystem().devices().controllerForStation(1);
@@ -350,8 +360,27 @@ void SelfTest::build() {
         const auto* d = app_.inputSystem().devices().controllerForStation(2);
         return A().joined()[2] && d && d->id == ctl_[2].id;
     });
-    shot("05_join");
     add("join: any button on the arcade stick", [this] { pressStart(3); return true; });
+    waitFor("join: the arcade stick claimed station 4", [A] { return A().joined()[3]; });
+    // The vote: P3 looks at marathon first, then everyone votes battle.
+    add("vote: P3 moves right with the d-pad", [this] { pressButton(2, SDL_GAMEPAD_BUTTON_DPAD_RIGHT); return true; });
+    add("vote: P1 votes battle (left ctrl)", taps(SDL_SCANCODE_LCTRL, 1));
+    add("vote: P2 votes battle (pad)", [this] { pressFire(1); return true; });
+    add("vote: let it draw", settle(0.3));
+    add("vote: P3's cursor is on marathon, two votes for battle", [this, A] {
+        check(A().vote().cursor(2) == 1, std::format("P3 cursor {}", A().vote().cursor(2)));
+        check(A().vote().votesFor(0) == 2, std::format("battle votes {}", A().vote().votesFor(0)));
+        return true;
+    });
+    shot("05_vote");
+    add("vote: P3 moves back left", [this] { pressButton(2, SDL_GAMEPAD_BUTTON_DPAD_LEFT); return true; });
+    add("vote: P3 votes battle", [this] { pressFire(2); return true; });
+    add("vote: P4 votes battle (stick)", [this] { pressFire(3); return true; });
+    waitFor("vote: battle wins outright - its card shows", [A] {
+        return A().state() == ArcadeState::Vote && A().votePhase() == arcade::VotePhase::Intro && A().chosenMode() == gameplay::ModeId::Battle;
+    }, 15);
+    add("vote: let the card grow", settle(0.6));
+    shot("23_mode_intro");
     waitFor("match: four humans, multiplayer, started at once", [A] {
         return A().state() == ArcadeState::Playing && A().lineup().humans == 4 && A().lineup().mode == players::GameMode::Multiplayer &&
                A().lineup().bots == 0;
@@ -530,11 +559,12 @@ void SelfTest::build() {
     add("singleplayer: insert a coin", taps(SDL_SCANCODE_5, 1));
     waitFor("singleplayer: 1 credit", [A] { return A().credits().credits() == 1; });
     add("singleplayer: P1 start", [this] { tapKey(SDL_SCANCODE_1); return true; });
+    add("singleplayer: P1 votes battle (start again)", taps(SDL_SCANCODE_1, 1));
     waitFor("singleplayer: 1 human + 3 bots after the join window", [A] {
         const auto& l = A().lineup();
         return A().state() == ArcadeState::Playing && l.mode == players::GameMode::Singleplayer && l.humans == 1 && l.bots == 3 &&
                l.seats[0] == players::SeatKind::Human;
-    }, 10);
+    }, 20);
     waitFor("singleplayer: P1 misses out, the bots play it out", [this, A] {
         drive({P::Spam, P::Idle, P::Idle, P::Idle});
         return A().state() == ArcadeState::GameOver;
@@ -606,10 +636,11 @@ void SelfTest::build() {
     // --- singleplayer with zero bots (T10)
     add("solo: insert a coin", taps(SDL_SCANCODE_5, 1));
     add("solo: P1 start", [this] { tapKey(SDL_SCANCODE_1); return true; });
+    add("solo: P1 votes battle (start again)", taps(SDL_SCANCODE_1, 1));
     waitFor("solo: 1 human, 0 bots, singleplayer", [A] {
         const auto& l = A().lineup();
         return A().state() == ArcadeState::Playing && l.mode == players::GameMode::Singleplayer && l.humans == 1 && l.bots == 0;
-    }, 10);
+    }, 20);
     waitFor("solo: clear round 1, then miss", [this, A, M] {
         if (A().state() != ArcadeState::Playing || !M()) return A().state() == ArcadeState::GameOver;
         drive({M()->round() == 1 ? P::Oracle : P::Spam, P::Idle, P::Idle, P::Idle});
@@ -724,14 +755,15 @@ void SelfTest::build() {
         const auto [x, y] = columnPoint(1);
         tapScreen(x, y);
     }));
-    waitFor("touch: station 2 joined", [A] { return A().state() == ArcadeState::Join && A().joined()[1]; }, 5);
-    add("touch: tap it again to start at once", once([this, columnPoint] {
+    waitFor("touch: station 2 joined", [A] { return A().state() == ArcadeState::Vote && A().joined()[1]; }, 5);
+    add("touch: tap the middle of the column to vote battle", once([this, columnPoint] {
         const auto [x, y] = columnPoint(1);
         tapScreen(x, y);
     }));
     waitFor("touch: one human playing at station 2", [A] {
-        return A().state() == ArcadeState::Playing && A().lineup().humans == 1 && A().lineup().seats[1] == players::SeatKind::Human;
-    }, 5);
+        return A().state() == ArcadeState::Playing && A().lineup().humans == 1 && A().lineup().seats[1] == players::SeatKind::Human &&
+               A().currentMode() == gameplay::ModeId::Battle;
+    }, 15);
     waitFor("touch: the round starts", [M] { return M() && M()->phase() == gameplay::MatchPhase::Playing; }, 10);
     add("touch: remember station 2's needles", once([this, M] { touchNeedles_ = M()->field(1).needlesLeft(); }));
     add("touch: a tap on the far side of the screen fires station 2's needle", once([this] { tapScreen(0.9f, 0.5f); }));
@@ -763,6 +795,41 @@ void SelfTest::build() {
     add("touch: tap left twice to end, shoot it", tapSeq({0.1f, 0.1f, 0.5f}));
     waitFor("touch: saved, then the results", [A] { return A().state() == ArcadeState::GameOver; }, 10);
     waitFor("touch: back to attract", [A] { return A().state() == ArcadeState::Attract; }, 10);
+
+    // --- a tied vote spins the wheel
+    add("wheel: P2 uses the keyboard", [this] {
+        ctl_[1] = Controller{};
+        ctl_[1].kind = CtlKind::Keyboard;
+        ctl_[1].fireKey = SDL_SCANCODE_A;
+        ctl_[1].startKey = SDL_SCANCODE_2;
+        return true;
+    });
+    add("wheel: insert 2 coins", taps(SDL_SCANCODE_5, 2));
+    waitFor("wheel: 2 credits", [A] { return A().credits().credits() == 2; });
+    add("wheel: P1 and P2 join", taps(SDL_SCANCODE_1, 1));
+    add("wheel: P2 joins", taps(SDL_SCANCODE_2, 1));
+    waitFor("wheel: both in", [A] { return A().state() == ArcadeState::Vote && A().joined()[0] && A().joined()[1]; }, 5);
+    add("wheel: P1 votes battle, P2 turns right (K) to marathon and votes", taps(SDL_SCANCODE_LCTRL, 1));
+    add("wheel: P2 right", taps(SDL_SCANCODE_K, 1));
+    add("wheel: P2 votes", taps(SDL_SCANCODE_A, 1));
+    waitFor("wheel: one vote each - the wheel spins", [A] { return A().votePhase() == arcade::VotePhase::Spin && A().votePhaseTime() > 1.4; }, 15);
+    add("wheel: two slices, battle and marathon", [this, A] {
+        check(A().wheel().size() == 2, std::format("{} slices", A().wheel().size()));
+        return true;
+    });
+    shot("24_wheel");
+    waitFor("wheel: it stops on one of them and its card shows", [A] {
+        return A().votePhase() == arcade::VotePhase::Intro &&
+               (A().chosenMode() == gameplay::ModeId::Battle || A().chosenMode() == gameplay::ModeId::Marathon);
+    }, 10);
+    waitFor("wheel: that mode is played", [A] {
+        return A().state() == ArcadeState::Playing && (A().currentMode() == gameplay::ModeId::Battle || A().currentMode() == gameplay::ModeId::Marathon);
+    }, 10);
+    waitFor("wheel: both crash out quickly", [this, A] {
+        if (A().state() == ArcadeState::Playing) drive({P::Spam, P::Spam, P::Idle, P::Idle});
+        return A().state() == ArcadeState::GameOver || A().state() == ArcadeState::Attract;
+    }, 240);
+    waitFor("wheel: back to attract", [A] { return A().state() == ArcadeState::Attract; }, 30);
 }
 
 // ------------------------------------------------------------------ runner

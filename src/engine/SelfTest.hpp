@@ -68,6 +68,7 @@ private:
     void fingerEvent(Uint32 type, SDL_FingerID id, float x, float y);
     void pressFire(int station);
     void pressStart(int station);
+    void pressButton(int station, int button); // a virtual pad button, released a tick later
     void setButton(Controller& c, int button, bool down);
     bool attachPad(int station, Uint16 vendor, Uint16 product, const char* name);
     bool attachStick(int station);

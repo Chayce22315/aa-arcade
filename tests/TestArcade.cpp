@@ -28,7 +28,7 @@ arcade::BotFactory factory() {
 config::Settings testSettings() {
     config::Settings s = config::Settings::defaults();
     s.gameplay.seed = 1234;
-    s.arcade.joinWindow = 5;
+    s.arcade.voteSeconds = 10;
     s.arcade.gameOverTime = 3;
     s.gameplay.roundTimeLimit = 20;
     return s;
@@ -51,6 +51,13 @@ ArcadeInput coin() {
 }
 
 constexpr int kSecond = gameplay::geom::kTickRate;
+
+// Each listed (joined) station votes for the card under its cursor - battle, the first card - and the
+// vote screen runs out: everyone voted, so 5 s, then the mode's card, then the match.
+void voteBattleAndPlay(ArcadeMachine& m, std::initializer_list<int> voters) {
+    for (int s : voters) m.tick(startAt(s));
+    for (int i = 0; i < 20 * kSecond && m.state() == ArcadeState::Vote; ++i) m.tick({});
+}
 
 } // namespace
 
@@ -96,11 +103,12 @@ TEST_CASE(arcade_full_cycle_singleplayer_with_bots) {
     CHECK_EQ(m.credits().credits(), 1);
     CHECK_EQ(m.bookkeeping().coins, std::uint64_t{1});
     m.tick(startAt(2));
-    CHECK(m.state() == ArcadeState::Join);
+    CHECK(m.state() == ArcadeState::Vote);
     CHECK_EQ(m.credits().credits(), 0);
     CHECK(m.joined()[2]);
-    ticks(m, s.arcade.joinWindow * kSecond + 2);
+    voteBattleAndPlay(m, {2});
     REQUIRE(m.state() == ArcadeState::Playing);
+    CHECK(m.currentMode() == gameplay::ModeId::Battle);
     CHECK(m.lineup().mode == players::GameMode::Singleplayer);
     CHECK_EQ(m.lineup().humans, 1);
     CHECK_EQ(m.lineup().bots, 3);
@@ -131,7 +139,7 @@ TEST_CASE(arcade_multiplayer_join_and_early_start) {
     m.tick(startAt(1)); // no credit left
     CHECK(!m.joined()[1]);
     CHECK(m.needCoinFlash(1) > 0.0);
-    m.tick(startAt(0)); // joined player starts early
+    voteBattleAndPlay(m, {0, 3}); // both vote: the clock drops to 5 s
     REQUIRE(m.state() == ArcadeState::Playing);
     CHECK(m.lineup().mode == players::GameMode::Multiplayer);
     CHECK_EQ(m.lineup().humans, 2);
@@ -151,8 +159,8 @@ TEST_CASE(arcade_free_play_and_coin_during_game_over_returns_to_press_start) {
     s.bots.difficulty = config::Difficulty::Expert;
     ArcadeMachine m(s, levels, factory(), {}, 1);
     m.tick(startAt(1));
-    CHECK(m.state() == ArcadeState::Join);
-    ticks(m, s.arcade.joinWindow * kSecond + 2);
+    CHECK(m.state() == ArcadeState::Vote);
+    voteBattleAndPlay(m, {1});
     REQUIRE(m.state() == ArcadeState::Playing);
     for (int i = 0; i < 900 * kSecond && m.state() == ArcadeState::Playing; ++i) m.tick({});
     REQUIRE(m.state() == ArcadeState::GameOver);
@@ -167,7 +175,7 @@ TEST_CASE(arcade_disconnect_pauses_and_start_resumes) {
     s.bots.singleplayerBots = 1;
     ArcadeMachine m(s, levels, factory(), {}, 1);
     m.tick(startAt(0));
-    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
     REQUIRE(m.state() == ArcadeState::Playing);
     ticks(m, 3 * kSecond);
     m.stationDisconnected(0);
@@ -257,7 +265,7 @@ TEST_CASE(arcade_knocked_out_player_shoots_initials_while_the_match_goes_on) {
     ArcadeMachine m(s, levels, factory(), {}, 1);
     m.setToday("2026-11-26");
     m.tick(startAt(0));
-    m.tick(startAt(0)); // go
+    voteBattleAndPlay(m, {0});
     REQUIRE(m.state() == ArcadeState::Playing);
     // Round 1: aim properly and score.
     for (int i = 0; i < 60 * kSecond && m.match()->round() == 1; ++i) playTick(m, 0, aimed);
@@ -296,7 +304,7 @@ TEST_CASE(arcade_last_player_out_gets_the_initials_screen_before_the_results) {
     s.arcade.freePlay = true;
     ArcadeMachine m(s, levels, factory(), {}, 1);
     m.tick(startAt(3));
-    m.tick(startAt(3));
+    voteBattleAndPlay(m, {3});
     REQUIRE(m.state() == ArcadeState::Playing);
     for (int i = 0; i < 60 * kSecond && m.match()->round() == 1; ++i) playTick(m, 3, aimed);
     for (int i = 0; i < 120 * kSecond && m.state() == ArcadeState::Playing; ++i) playTick(m, 3, spamFire);

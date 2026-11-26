@@ -122,10 +122,26 @@ Coin and cabinet behaviour.
 | `credits_per_coin` | `1` | 1..9 | credits added per coin |
 | `credits_per_game` | `1` | 1..9 | credits each player pays to join |
 | `max_credits` | `99` | 1..99 | coins above this are still counted but add no credits |
-| `join_window` | `10` | 3..30 | seconds other stations have to join after the first start |
+| `vote_seconds` | `30` | 10..60 | seconds of the join and game mode vote screen after the first start (replaces `join_window`, which is now ignored) |
 | `game_over_time` | `8` | 3..30 | seconds the results stay on screen |
 | `exit_hold_seconds` | `2` | 0..10 | hold the exit key this long to quit; 0 = locked cabinet (service menu only) |
 | `initials_seconds` | `15` | 10..30 | seconds a player has to shoot their initials into the high score table |
+
+### [Modes]
+
+Game modes players can vote for (1 = on). With every mode off, battle stays on.
+
+| Key | Default | Valid | Meaning |
+|---|---|---|---|
+| `battle` | `1` | 0 \| 1 | last one standing wins |
+| `marathon` | `1` | 0 \| 1 | play till everyone is out - best score wins |
+| `blitz` | `1` | 0 \| 1 | 90 seconds, no knock-outs - best score wins |
+| `race` | `1` | 0 \| 1 | first to clear takes the round - first to 5 |
+| `crown` | `1` | 0 \| 1 | hold the crown at round ends - 8 rounds |
+| `sabotage` | `1` | 0 \| 1 | clears and close calls send junk to rivals |
+| `teams` | `1` | 0 \| 1 | P1 + P2 against P3 + P4, shared tries |
+| `chaos` | `1` | 0 \| 1 | every round rolls a mutator |
+| `daily` | `1` | 0 \| 1 | today's levels, same for everyone |
 
 ### [Keys.Player1]
 

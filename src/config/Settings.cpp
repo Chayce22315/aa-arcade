@@ -9,6 +9,7 @@
 
 #include "assets/ControllerDbPin.hpp"
 #include "engine/Branding.hpp"
+#include "gameplay/Modes.hpp"
 #include "gameplay/Powerups.hpp"
 
 namespace spindle::config {
@@ -165,10 +166,14 @@ void visitAll(Settings& s, V& v) {
     v.integer("credits_per_coin", s.arcade.creditsPerCoin, 1, 9, "credits added per coin");
     v.integer("credits_per_game", s.arcade.creditsPerGame, 1, 9, "credits each player pays to join");
     v.integer("max_credits", s.arcade.maxCredits, 1, 99, "coins above this are still counted but add no credits");
-    v.integer("join_window", s.arcade.joinWindow, 3, 30, "seconds other stations have to join after the first start");
+    v.integer("vote_seconds", s.arcade.voteSeconds, 10, 60, "seconds of the join and game mode vote screen after the first start");
     v.integer("game_over_time", s.arcade.gameOverTime, 3, 30, "seconds the results stay on screen");
     v.integer("exit_hold_seconds", s.arcade.exitHoldSeconds, 0, 10, "hold the exit key this long to quit; 0 = locked cabinet (service menu only)");
     v.integer("initials_seconds", s.arcade.initialsSeconds, 10, 30, "seconds a player has to shoot their initials into the high score table");
+
+    v.section("Modes", "Game modes players can vote for (1 = on). With every mode off, battle stays on.");
+    for (std::size_t m = 0; m < gameplay::kModeCount; ++m)
+        v.boolean(std::string(gameplay::modeKey(gameplay::kAllModes[m])), s.modes.enabled[m], std::string(gameplay::modeBlurb(gameplay::kAllModes[m])));
 
     for (int i = 0; i < kStationCount; ++i) {
         v.section(std::format("Keys.Player{}", i + 1), i == 0 ? "Keyboard bindings: SDL scancode names, several keys separated by commas." : "");

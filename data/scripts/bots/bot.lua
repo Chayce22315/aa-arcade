@@ -17,6 +17,7 @@
 --   claim_angle                  a needle landing within this angle of a ring takes it
 --   revision                     changes whenever the needles in the circle change (placed or burnt)
 --   fire_enabled                 the fire meter is on this round
+--   blind                        a chaos "blind" round (humans only glimpse needles): aim looser
 --   combo, combo_target          fire-meter combo now / the combo that sets the station on fire
 --   chain_left                   seconds before the combo drops if no needle lands (0 = no chain)
 --   close_call                   a needle landing nearer than this to another counts double (radians)
@@ -181,9 +182,11 @@ function decide(obs, p, mem)
   -- One timing error per shot, like a human pressing a little early or late. It is drawn before the
   -- bot starts waiting, so the reachability map below records where this press would really land.
   if mem.noise == nil then
-    local n = gauss() * p.jitter
+    -- In a blind round humans only glimpse each needle, so the bot's timing is half as sure again.
+    local jitter = obs.blind and p.jitter * 1.5 or p.jitter
+    local n = gauss() * jitter
     if math.random() < p.blunder then
-      n = n * 4 + ((math.random() < 0.5) and -1 or 1) * p.jitter * 3
+      n = n * 4 + ((math.random() < 0.5) and -1 or 1) * jitter * 3
     end
     mem.noise = n
     mem.greedy = math.random() < p.greed

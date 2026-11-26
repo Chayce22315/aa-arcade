@@ -12,6 +12,7 @@
 #include "arcade/Credits.hpp"
 #include "arcade/HighScores.hpp"
 #include "arcade/InitialsEntry.hpp"
+#include "arcade/VoteBox.hpp"
 #include "audio/SoundId.hpp"
 #include "bots/BotController.hpp"
 #include "config/Settings.hpp"
@@ -21,8 +22,11 @@
 
 namespace spindle::arcade {
 
-// Initials: after the last round end screen, players who made a high score table shoot their initials.
-enum class ArcadeState { Attract, InsertCoin, Join, Playing, Initials, GameOver };
+// Vote: players join and vote for a game mode. Initials: after the last round end screen, players who
+// made a high score table shoot their initials.
+enum class ArcadeState { Attract, InsertCoin, Vote, Playing, Initials, GameOver };
+// Inside Vote: voting (joining still open), the tie-break wheel, then the chosen mode's card.
+enum class VotePhase { Voting, Spin, Intro };
 enum class AttractPage { Title, HowTo, Demo, HighScores };
 
 struct StationButtons {
@@ -57,6 +61,9 @@ struct MatchResult {
     int finalRound = 0;
     std::array<int, gameplay::kMaxStations> roundsCleared{};
     std::array<std::int64_t, gameplay::kMaxStations> scores{};
+    gameplay::ModeId gameMode = gameplay::ModeId::Battle;
+    std::array<int, gameplay::kMaxStations> points{}; // race wins / crown points
+    std::optional<int> winningTeam;                   // teams
 };
 
 using BotFactory = std::function<std::unique_ptr<bots::BotController>(config::Difficulty, std::uint64_t seed)>;
@@ -94,7 +101,16 @@ public:
     const gameplay::Match* match() const { return match_.get(); }
     const players::Lineup& lineup() const { return lineup_; }
     const std::array<bool, gameplay::kMaxStations>& joined() const { return joined_; }
-    double joinTimeLeft() const;
+    // The vote screen.
+    double voteTimeLeft() const;
+    const VoteBox& vote() const { return vote_; }
+    VotePhase votePhase() const { return votePhase_; }
+    double votePhaseTime() const { return votePhaseTime_; }
+    const std::vector<int>& wheel() const { return wheel_; } // card indices on the tie-break wheel
+    int wheelResult() const { return wheelResult_; }          // the slice it stops on
+    gameplay::ModeId chosenMode() const { return chosenMode_; }
+    gameplay::ModeId currentMode() const { return currentMode_; } // the match (or demo) being played
+    std::vector<gameplay::ModeId> enabledModes() const;
     double gameOverTimeLeft() const;
     double needCoinFlash(int station) const { return needCoin_[static_cast<std::size_t>(station)]; }
     bool stationWaitingForReconnect(int station) const;
@@ -110,11 +126,12 @@ public:
     // A player shooting their initials (knocked out mid-match, or after the last round), if any.
     const std::optional<InitialsEntry>& entry(int station) const { return entries_[static_cast<std::size_t>(station)]; }
     bool entering(int station) const;
-    // Table the current match's scores go into (one per game mode).
-    std::string_view scoreTable() const { return kBattleTable; }
-    static constexpr std::string_view kBattleTable = "battle";
-    // Every table highscores.ini may hold.
-    static constexpr std::array<std::string_view, 1> kScoreTables{kBattleTable};
+    // Table the current match's scores go into (one per game mode), and the one the attract page shows.
+    std::string_view scoreTable() const { return gameplay::modeKey(currentMode_); }
+    std::string_view attractTable() const { return gameplay::modeKey(gameplay::kAllModes[static_cast<std::size_t>(attractTable_)]); }
+    // Every table highscores.ini may hold (the mode keys, in gameplay::kAllModes order).
+    static constexpr std::array<std::string_view, gameplay::kModeCount> kScoreTables{"battle", "marathon", "blitz", "race",  "crown",
+                                                                                     "sabotage", "teams", "chaos", "daily"};
 
     std::vector<ArcadeEvent> takeEvents();
 
@@ -131,7 +148,12 @@ private:
     void enter(ArcadeState s);
     void enterAttractPage(AttractPage p);
     void startDemo();
-    void startMatch();
+    void startMatch(gameplay::ModeId mode);
+    void enterVote();
+    void tickVote(const ArcadeInput& input, double dt);
+    void finishVote();
+    void startIntro();
+    bool nextAttractTable();
     void endMatch();
     void tickMatch(const ArcadeInput& input, bool demo);
     void handleCoins(const ArcadeInput& input);
@@ -141,7 +163,7 @@ private:
     void tallySounds(bool demo);
     void updatePause();
     void sound(audio::SoundId id, bool demo = false);
-    gameplay::MatchConfig matchConfig(bool demo);
+    gameplay::MatchConfig matchConfig(bool demo, gameplay::ModeId mode);
 
     config::Settings settings_;
     gameplay::LevelProvider& levels_;
@@ -169,6 +191,16 @@ private:
     std::array<bool, gameplay::kMaxStations> entryPending_{}; // knocked out: entry starts when the round end screen is over
     std::array<bool, gameplay::kMaxStations> entryChecked_{}; // this match's score was already offered to the tables
     double entriesDoneTime_ = 0.0;
+    VoteBox vote_;
+    VotePhase votePhase_ = VotePhase::Voting;
+    double votePhaseTime_ = 0.0;
+    std::vector<int> wheel_;
+    int wheelResult_ = 0;
+    int wheelSlice_ = 0;
+    std::array<HoldRepeat, gameplay::kMaxStations> voteLeft_{}, voteRight_{};
+    gameplay::ModeId chosenMode_ = gameplay::ModeId::Battle;
+    gameplay::ModeId currentMode_ = gameplay::ModeId::Battle;
+    int attractTable_ = 0;
     int tallyTicks_ = 0; // round end screen sounds already played this tally
     bool tallyDone_ = false;
     bool tallyCrown_ = false;

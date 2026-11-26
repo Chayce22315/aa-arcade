@@ -22,7 +22,51 @@ already placed, needles to place, rotation program, seed) at the same moment.
 
 Each station keeps its own placements, its own needles in flight and its own collision result.
 
-## Modes
+## Joining and the vote
+
+The first player to press start (with a credit) opens the **vote screen**. Others join by pressing
+start in their own column while it runs; joining costs a credit as before. Nobody can join once the
+match has started.
+
+- Nine game mode cards are shown (only the ones the operator switched on). Each joined player has a
+  cursor (P1-P4): **left / right** move it, **fire** (or start) votes for the card under it. A vote can
+  be changed until the clock runs out. CPUs do not vote.
+- The clock is `[Arcade] vote_seconds` (30 s). Once every joined player has voted it drops to 5 s; a
+  player joining in the last 5 s pushes it back to 5 s so they still get a vote.
+- The mode with the most votes wins. **A tie spins the wheel**: the tied modes are equal slices (50/50
+  for two), a needle shoots up and the slice it sticks in wins. Nobody voting puts every mode on it.
+- The chosen mode's card shows for 2 s, then the match starts.
+- With only one mode switched on, the screen is for joining only: pressing start again begins.
+- Touch: tap a column to join; a joined column splits into thirds (left / vote / right).
+
+## Game modes
+
+Every mode keeps the shared circle: all stations play the same round at the same time. Scores, the
+round end screen and the crown work in all of them; each mode has its own high score tables. The
+numbers are uncalibrated starting values.
+
+| Mode | Knock-outs | Ends | Winner |
+|---|---|---|---|
+| battle | tries | one player left | the last one standing (T1-T11 below) |
+| marathon | tries | everyone is out | the best score |
+| blitz | none; a failed round costs 50 x R points | the 90 s match clock runs out (only time spent playing counts; the last round stops where it is, without a clear bonus) | the best score |
+| race | none | someone has taken 5 rounds | first to 5; the first player to clear a round takes it (same tick: both) |
+| crown | none | after 8 rounds | the most crown points: one for holding the crown at each round end |
+| sabotage | tries | one player left | the last one standing; each clear, and every third close call in a round, sends a junk needle into every rival's next round (at most 4 per round, only where the round stays playable) |
+| teams | a shared pool per team (tries x 2) | one team left | P1 + P2 against P3 + P4; CPUs fill every empty seat; a failed round costs the team one try, an empty pool knocks the whole team out |
+| chaos | tries | one player left | the last one standing; every round rolls one mutator for everyone: blind (needles fade a moment after they stick), tiny balls, big balls, fast, or 2 extra needles - kept only if the round stays playable |
+| daily | tries | everyone is out | the best score; the levels come from the local date, so everyone gets the same ones that day; its table keeps today's scores only |
+
+- **Score ties** (marathon, blitz, race, crown, daily): the mode's own count (rounds won, crown
+  points), then score, then needles placed, then rounds cleared, then the lowest station.
+- **Teams tie** (both pools empty in the same round): the team with the better combined score, then
+  needles, then rounds cleared.
+- A race nobody clears for 3 rounds in a row ends on score.
+- Mend gives a try back only in modes with personal tries.
+- In a blind round CPUs aim with 1.5x their usual timing error, since they read the circle as data.
+- The attract demo plays a random switched-on mode each time.
+
+## Singleplayer and multiplayer
 
 | Humans | Mode | Bots added |
 |---|---|---|
@@ -200,8 +244,8 @@ It shows each player's final score next to their rank.
 
 On a phone or tablet the screen is the cabinet: the four stations are its four columns.
 
-- **Joining:** tap a column to join at that station (phones default to free play, so no coin is
-  needed); tap your column again to start straight away, or wait for the join timer.
+- **Joining and voting:** tap a column to join at that station (phones default to free play, so no
+  coin is needed). On the vote screen a joined column splits into thirds: left / vote / right.
 - **One player** (usually a phone against bots): tap anywhere to fire.
 - **Several players** (around a tablet): each player taps their own column; taps on a bot's column do
   nothing. Every finger counts on its own, so players can tap at the same time.

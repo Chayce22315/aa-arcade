@@ -164,3 +164,16 @@ Today's tables use the platform's local date, passed in by the app; the core nev
 
 **Station keys never auto-repeat; the letter wheel repeats on the tick.** Operating-system key repeat
 would also repeat fire, so `HoldRepeat` (0.35 s, then every 0.09 s) repeats left / right in the core.
+
+**Every game mode keeps the shared circle.** The nine modes change only how rounds are scored and how a
+match ends; every station still plays the same round on the same rotor at the same moment. That is why
+race is "first to clear takes the round" rather than players racing through rounds at their own pace
+(which would need one rotor per station), and why sabotage junk and chaos mutators are pure functions
+of the round that re-check the level: a station's copy of the round can gain junk needles, never a
+different rotation. The mode rules (`gameplay/Modes`) and the vote (`arcade/VoteBox`) are core code
+with their own tests; the wheel's spin is drawn from the same function the tests check.
+
+**The vote replaces the join window.** The first start opens one screen where players join and vote;
+the clock rules (5 s once everyone voted, a late joiner pushes it back to 5 s) keep it short without
+locking anyone out. Votes, ties and the wheel are deterministic for a seed, so they are tested like
+the rules.

@@ -44,7 +44,11 @@ void drawGameOver(const ScreenContext& c) {
     const float cx = midX(c);
     textAt(c, "GAME OVER", cx, areaY(c, 150), 70, colors::kWhite);
     if (!res) return;
-    if (res->winner >= 0) {
+    textAt(c, gameplay::modeName(res->gameMode), cx, areaY(c, 236), 20, colors::kDim);
+    if (res->winningTeam) {
+        textAt(c, std::format("team {} wins", *res->winningTeam + 1), cx, areaY(c, 290), 56, colors::kWhite);
+        textAt(c, *res->winningTeam == 0 ? "P1 + P2" : "P3 + P4", cx, areaY(c, 370), 18, colors::kDim);
+    } else if (res->winner >= 0) {
         const auto i = static_cast<std::size_t>(res->winner);
         const bool bot = res->lineup.seats[i] == players::SeatKind::Bot;
         textAt(c, std::format("P{} wins", res->winner + 1), cx, areaY(c, 290), 56, colors::kWhite);
@@ -66,7 +70,11 @@ void drawGameOver(const ScreenContext& c) {
         c.r.text(std::format("{}", rank), {cx - px(c, 420), yy}, px(c, 24), col, Align::Right);
         c.r.text(std::format("P{}  {}", s + 1, bot ? "cpu" : "player"), {cx - px(c, 380), yy}, px(c, 24), col, Align::Left);
         c.r.text(std::to_string(res->scores[i]), {cx + px(c, 160), yy}, px(c, 26), col, Align::Right);
-        c.r.text(std::format("rounds cleared {}", res->roundsCleared[i]), {cx + px(c, 220), yy}, px(c, 18), colors::kDim, Align::Left);
+        const auto end = gameplay::modeRules(res->gameMode).end;
+        const std::string extra = end == gameplay::MatchEnd::FirstTo ? std::format("rounds won {}", res->points[i])
+                                  : end == gameplay::MatchEnd::Rounds ? std::format("crown points {}", res->points[i])
+                                                                      : std::format("rounds cleared {}", res->roundsCleared[i]);
+        c.r.text(extra, {cx + px(c, 220), yy}, px(c, 18), colors::kDim, Align::Left);
         ++rank;
         y += 56;
     }

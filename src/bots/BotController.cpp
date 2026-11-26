@@ -13,7 +13,8 @@ BotController::BotController(std::unique_ptr<BotBrain> brain) : brain_(std::move
     history_.resize(static_cast<std::size_t>(delayTicks_) + 1);
 }
 
-void BotController::beginRound() {
+void BotController::beginRound(bool blind) {
+    blind_ = blind;
     head_ = 0;
     filled_ = 0;
     brain_->resetMemory();
@@ -55,6 +56,7 @@ int BotController::think(const gameplay::RotorState& rotor, const gameplay::Play
     const auto& cfg = field.config();
     v.flightTime = (cfg.launchDistance - cfg.needleLength) / field.needleSpeed(); // swift makes it shorter
     v.fireEnabled = cfg.fireEnabled;
+    v.blind = blind_;
     v.onFire = seen.onFire;
     v.fireLeft = seen.fireLeft;
     v.combo = seen.combo;

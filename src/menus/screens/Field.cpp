@@ -10,6 +10,56 @@
 namespace spindle::menus::screens {
 namespace {
 
+constexpr Color kJunk{1.0f, 0.5f, 0.22f, 1.0f};
+constexpr float kBlindShow = 0.5f, kBlindFade = 0.3f; // seconds a needle shows, then fades, in a blind round
+
+std::string clockText(double seconds) {
+    const int s = static_cast<int>(std::ceil(std::max(0.0, seconds)));
+    return std::format("{}:{:02}", s / 60, s % 60);
+}
+
+// The line across the top: the mode, its clock or count, and the round intro while players get ready.
+void drawModeBanner(const ScreenContext& c, const gameplay::Match& m, bool demo) {
+    const auto& mode = m.mode();
+    const float cx = midX(c);
+    std::string line(gameplay::modeName(mode.id));
+    switch (mode.id) {
+    case gameplay::ModeId::Race: line += std::format("  first to {}", mode.target); break;
+    case gameplay::ModeId::Crown: line += std::format("  round {} of {}", std::min(mode.target, m.roundsPlayed() + 1), mode.target); break;
+    case gameplay::ModeId::Daily: line += std::format("  {}", c.arcade.highScores().today()); break;
+    default: break;
+    }
+    if (demo) line = "demo  " + line;
+    if (m.suddenDeath()) line = "sudden death";
+    if (m.phase() == gameplay::MatchPhase::Ready) {
+        textAt(c, std::format("round {}", m.round()), cx, areaY(c, 4), 30, colors::kWhite);
+        if (m.mutator() != gameplay::Mutator::None) textAt(c, gameplay::mutatorName(m.mutator()), cx, areaY(c, 44), 18, kGold);
+    } else if (mode.end == gameplay::MatchEnd::Clock) {
+        const double left = m.clockLeft();
+        textAt(c, clockText(left), cx, areaY(c, 6), 30, left <= 10.0 ? kMissRed : colors::kWhite);
+    } else {
+        textAt(c, line, cx, areaY(c, 22), m.suddenDeath() ? 20 : 15, m.suddenDeath() ? colors::kWhite : colors::kDim);
+    }
+    if (m.phase() == gameplay::MatchPhase::Playing && m.mutator() != gameplay::Mutator::None)
+        textAt(c, gameplay::mutatorName(m.mutator()), cx, areaY(c, 44), 14, kGold.withAlpha(0.7f));
+}
+
+// Under a station's header: race wins, crown points or its team.
+void drawModeCounts(const ScreenContext& c, const gameplay::Match& m, int s) {
+    const auto& mode = m.mode();
+    const Rect& col = c.layout.columns[static_cast<std::size_t>(s)];
+    const auto& p = *m.participant(s);
+    if (mode.end == gameplay::MatchEnd::FirstTo) {
+        for (int k = 0; k < mode.target; ++k) {
+            const Vec2 pt{col.x + px(c, 48 + 22.0f * static_cast<float>(k)), col.y + px(c, 144)};
+            if (k < p.raceWins) c.r.fillCircle(pt, px(c, 7), kGold);
+            else c.r.ring(pt, px(c, 7), px(c, 1.6f), colors::kOut);
+        }
+    } else if (mode.end == gameplay::MatchEnd::Rounds) {
+        textAt(c, std::format("crown points {}", p.crownPoints), col.x + px(c, 40), col.y + px(c, 136), 14, kGold, Align::Left);
+    }
+}
+
 // 0..1 strength of the "on fire" look: quick flare-up, steady, then dying down over the last moments.
 float fireStrength(const gameplay::Playfield& f, std::uint64_t now) {
     if (f.fireUntilTick() == 0 || now < f.fireStartTick()) return 0.0f;
@@ -104,10 +154,19 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
                             fg.withAlpha(0.9f));
 
     const auto& attached = f.attached();
+    const bool blind = m.mutator() == gameplay::Mutator::Blind && m.phase() == gameplay::MatchPhase::Playing;
     for (std::size_t i = 0; i < attached.size(); ++i) {
         const Vec2 p = onCircle(attached[i].angle);
         const bool hit = f.status() == gameplay::FieldStatus::Failed && f.conflictAttached() && *f.conflictAttached() == i;
-        const Color col = hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : lookColor(look, static_cast<float>(attached[i].angle + angle), c.time);
+        Color col = hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : lookColor(look, static_cast<float>(attached[i].angle + angle), c.time);
+        if (!hit && attached[i].junk) col = kJunk.withAlpha(col.a); // sabotage: sent by a rival
+        if (blind && !hit && !attached[i].preplaced) {
+            // Blind: a needle shows for a moment after it sticks, then fades away.
+            const float age = static_cast<float>(ticksToSeconds(attached[i].tick, now));
+            const float a = std::clamp(1.0f - (age - kBlindShow) / kBlindFade, 0.0f, 1.0f);
+            if (a <= 0.0f) continue;
+            col = col.withAlpha(col.a * a);
+        }
         c.r.line(centre, p, needle, col);
         drawBall(c, p, ball, 0, col, false);
     }
@@ -200,8 +259,11 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
         StationLook look;
         if (out) look.fg = colors::kOut;
         look.rainbow = !out && m.crownHolder() == s && !tally;
-        drawStationHeader(c, s, bot ? "cpu" : "player", out ? colors::kOut : colors::kWhite);
-        drawTries(c, s, *p, m.config().tries);
+        std::string kind = bot ? "cpu" : "player";
+        if (p->team >= 0) kind += std::format("  team {}", p->team + 1);
+        drawStationHeader(c, s, kind, out ? colors::kOut : colors::kWhite);
+        if (m.mode().knockouts || m.mode().teams) drawTries(c, s, *p, m.maxTries());
+        drawModeCounts(c, m, s);
         if (tally && m.tallied(s)) {
             drawTallyStation(c, m, s);
             continue;
@@ -230,7 +292,10 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
         } else if (f.status() == gameplay::FieldStatus::Failed) {
             drawStationStatus(c, s, f.failReason() == gameplay::FailReason::Timeout ? "time" : "miss", kMissRed);
         } else if (m.phase() == gameplay::MatchPhase::Ready) {
-            drawStationStatus(c, s, "ready", colors::kDim, 24);
+            if (m.junkFor(s) > 0)
+                drawStationStatus(c, s, std::format("+{} junk", m.junkFor(s)), kJunk, 24);
+            else
+                drawStationStatus(c, s, "ready", colors::kDim, 24);
         } else if (f.onFire(now)) {
             drawStationStatus(c, s, "on fire!", kFire, 28);
         } else if (f.lastClaim() && now >= f.lastClaimTick() &&
@@ -245,9 +310,8 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
         }
     }
     drawCrownLayer(c, m);
-    if (m.suddenDeath() && m.phase() != gameplay::MatchPhase::Over) textAt(c, "sudden death", midX(c), areaY(c, 22), 20, colors::kWhite);
+    if (m.phase() != gameplay::MatchPhase::Over && m.phase() != gameplay::MatchPhase::Tally) drawModeBanner(c, m, demo);
     if (demo) {
-        textAt(c, "demo", midX(c), areaY(c, 22), 14, colors::kDim);
         if (blink(c.time))
             textAt(c, startPrompt(c), midX(c), areaY(c, 600), 40, colors::kWhite);
     }

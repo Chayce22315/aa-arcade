@@ -32,6 +32,7 @@ struct BotView {
     std::uint32_t revision = 0; // changes whenever the attached set changes (placements and burns)
     // Fire meter, as of the delayed moment.
     bool fireEnabled = false;
+    bool blind = false; // chaos "blind" round: humans only see a needle for a moment, so the bot aims looser
     bool onFire = false;
     double fireLeft = 0.0;      // seconds of fire left
     int combo = 0;

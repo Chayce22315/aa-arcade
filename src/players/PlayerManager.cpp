@@ -24,7 +24,7 @@ Lineup buildLineup(const std::array<bool, gameplay::kMaxStations>& joinedHumans,
     }
     l.mode = l.humans >= 2 ? GameMode::Multiplayer : GameMode::Singleplayer;
     const int wanted = l.mode == GameMode::Singleplayer ? std::clamp(fill.singleplayerBots, 0, 3) : std::clamp(fill.multiplayerBots, 0, 2);
-    int botsLeft = std::min(wanted, gameplay::kMaxStations - l.humans);
+    int botsLeft = fill.fillAll ? gameplay::kMaxStations - l.humans : std::min(wanted, gameplay::kMaxStations - l.humans);
     for (int s = 0; s < gameplay::kMaxStations && botsLeft > 0; ++s) {
         if (l.seats[static_cast<std::size_t>(s)] == SeatKind::Empty) {
             l.seats[static_cast<std::size_t>(s)] = SeatKind::Bot;

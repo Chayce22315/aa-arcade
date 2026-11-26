@@ -42,10 +42,11 @@ The same gesture works on any touch screen, including a touch monitor on a Windo
 | sound test | Plays each sound (including the powerup, shield, ignite and burn sounds); shows the audio device or "unavailable (silent)". |
 | volumes | Master, game sounds, coin and menu sounds (heard while changing), attract sound. |
 | game settings | Tries, round time limit, rotation speed, needle speed, ready delay, start round, level seed, powerups on/off and each ring type (shield, skip, slim, mend, heat, purge, swift) on/off, the fire meter on/off, the combo to catch fire, seconds on fire, the combo chain window, and the round end screen (full / short / off). |
-| coin settings | Free play, credits per coin, credits per player, max credits, join window, game over time, initials time, exit hold (0 = locked cabinet). |
+| coin settings | Free play, credits per coin, credits per player, max credits, vote time, game over time, initials time, exit hold (0 = locked cabinet). |
 | bot settings | Bots with one player, bots with two or more players, bot difficulty, demo difficulty. |
+| game modes | Vote time and each of the nine game modes on/off (with every mode off, battle stays on). |
 | bookkeeping | Coins, service credits, singleplayer and multiplayer games, wins by players and by bots, play time, the last five winners; "clear bookkeeping" (press twice). |
-| high scores | Every table (all time and today) with name, score, round and date; "clear high scores" (press twice). Saved in highscores.ini. |
+| high scores | Every mode's tables (all time and today) with name, score, round and date; "clear high scores" (press twice). Saved in highscores.ini. |
 | reset defaults | Loads all defaults into the menu (press twice); Save & Exit keeps them. |
 | save & exit | Applies every change at once (input, audio, display, credits, bots) and writes settings.ini, keeping its comments. |
 | exit without saving | Discards every change, including previewed video and volume changes. |

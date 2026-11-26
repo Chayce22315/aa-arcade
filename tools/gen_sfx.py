@@ -203,6 +203,40 @@ def initials_done() -> list[float]:
     return concat(*parts, last, gap=0.008)
 
 
+def vote_tick() -> list[float]:
+    # the cursor hops to the next card: a tiny wooden tick
+    return tone(lambda t: 1250.0, 0.03, ((1, 0.7), (3, 0.2)), attack=0.001, release=0.015, decay=0.012)
+
+
+def vote_cast() -> list[float]:
+    # a vote goes in: a firm two-step "ka-chunk"
+    a = tone(lambda t: 520.0, 0.06, ((1, 0.8), (2, 0.25)), attack=0.001, release=0.02, decay=0.04)
+    b = tone(lambda t: 780.0, 0.1, ((1, 0.8), (2, 0.2)), attack=0.001, release=0.04, decay=0.06)
+    return concat(a, b, gap=0.01)
+
+
+def wheel_tick() -> list[float]:
+    # a slice passes the needle: a dry click
+    rnd = Noise(73)
+    click = [rnd.next() * env(i / RATE, 0.012, attack=0.0003, release=0.006, decay=0.003) for i in range(int(0.012 * RATE))]
+    body = tone(lambda t: 1800.0, 0.012, ((1, 0.4),), attack=0.0005, release=0.006, decay=0.004)
+    return mix(click, body)
+
+
+def wheel_stop() -> list[float]:
+    # the needle sticks in the winning slice: thunk plus a bright ring
+    thunk = tone(lambda t: 140 - 60 * min(1.0, t / 0.08), 0.12, ((1, 1.0), (2, 0.3)), attack=0.001, release=0.05, decay=0.05)
+    ring = tone(lambda t: 1568.0, 0.45, ((1, 0.5), (2, 0.15)), attack=0.002, release=0.2, decay=0.25)
+    return mix(thunk, ring)
+
+
+def mode_intro() -> list[float]:
+    # the chosen mode's card: a rising swell into a chord
+    swell = tone(lambda t: 330 + 330 * min(1.0, t / 0.35), 0.35, ((1, 0.5), (2, 0.2)), attack=0.08, release=0.05)
+    chord = mix(*[tone(lambda t, f=f: f, 0.5, ((1, 0.35), (2, 0.1)), attack=0.004, release=0.25, decay=0.35) for f in (659.25, 830.61, 987.77)])
+    return concat(swell, chord)
+
+
 RECIPES = {
     "needle_hit": needle_hit,
     "fail": fail,
@@ -225,6 +259,11 @@ RECIPES = {
     "crown": crown,
     "letter_shot": letter_shot,
     "initials_done": initials_done,
+    "vote_tick": vote_tick,
+    "vote_cast": vote_cast,
+    "wheel_tick": wheel_tick,
+    "wheel_stop": wheel_stop,
+    "mode_intro": mode_intro,
 }
 
 

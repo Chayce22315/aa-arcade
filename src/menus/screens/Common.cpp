@@ -232,6 +232,78 @@ void drawCrown(const ScreenContext& c, Vec2 base, float size, Color col) {
         c.r.fillCircle({tip.x, tip.y - t * 0.6f}, t * 1.25f, col);
 }
 
+void frame(const ScreenContext& c, const Rect& r, float t, Color col) {
+    c.r.fillRect({r.x, r.y, r.w, t}, col);
+    c.r.fillRect({r.x, r.y + r.h - t, r.w, t}, col);
+    c.r.fillRect({r.x, r.y, t, r.h}, col);
+    c.r.fillRect({r.x + r.w - t, r.y, t, r.h}, col);
+}
+
+void drawModeIcon(const ScreenContext& c, gameplay::ModeId mode, Vec2 o, float rad, Color col) {
+    const float t = std::max(1.5f, rad * 0.09f);
+    const float ball = std::max(2.0f, rad * 0.13f);
+    switch (mode) {
+    case gameplay::ModeId::Battle: // two needles crossing
+        for (float s : {-1.0f, 1.0f}) {
+            const Vec2 a{o.x - rad * 0.7f, o.y + s * rad * 0.7f}, b{o.x + rad * 0.7f, o.y - s * rad * 0.7f};
+            c.r.line(a, b, t, col);
+            c.r.fillCircle(a, ball, col);
+            c.r.fillCircle(b, ball, col);
+        }
+        break;
+    case gameplay::ModeId::Marathon: // an endless loop
+        c.r.ring({o.x - rad * 0.42f, o.y}, rad * 0.4f, t, col);
+        c.r.ring({o.x + rad * 0.42f, o.y}, rad * 0.4f, t, col);
+        break;
+    case gameplay::ModeId::Blitz: { // a lightning bolt
+        const Vec2 bolt[] = {{o.x + rad * 0.25f, o.y - rad * 0.85f}, {o.x - rad * 0.35f, o.y + rad * 0.08f}, {o.x + rad * 0.12f, o.y + rad * 0.08f},
+                             {o.x - rad * 0.25f, o.y + rad * 0.85f}};
+        c.r.polyline(bolt, t * 1.3f, col);
+        break;
+    }
+    case gameplay::ModeId::Race: // two chevrons
+        for (float dx : {-0.38f, 0.22f}) {
+            const Vec2 ch[] = {{o.x + rad * dx, o.y - rad * 0.6f}, {o.x + rad * (dx + 0.4f), o.y}, {o.x + rad * dx, o.y + rad * 0.6f}};
+            c.r.polyline(ch, t * 1.3f, col);
+        }
+        break;
+    case gameplay::ModeId::Crown: drawCrown(c, {o.x, o.y + rad * 0.4f}, rad * 1.5f, col); break;
+    case gameplay::ModeId::Sabotage: { // a lit bomb: junk on its way
+        const Vec2 b{o.x - rad * 0.12f, o.y + rad * 0.15f};
+        c.r.fillCircle(b, rad * 0.5f, col);
+        const Vec2 fuse[] = {{b.x + rad * 0.3f, b.y - rad * 0.4f}, {o.x + rad * 0.45f, o.y - rad * 0.55f}, {o.x + rad * 0.6f, o.y - rad * 0.8f}};
+        c.r.polyline(fuse, t, col);
+        for (int i = 0; i < 4; ++i) {
+            const float a = kTau * static_cast<float>(i) / 4.0f + 0.4f;
+            const Vec2 spark{o.x + rad * 0.62f, o.y - rad * 0.84f};
+            c.r.line(spark, {spark.x + std::cos(a) * rad * 0.18f, spark.y + std::sin(a) * rad * 0.18f}, t * 0.8f, col);
+        }
+        break;
+    }
+    case gameplay::ModeId::Teams: // two pairs
+        for (float side : {-1.0f, 1.0f}) {
+            c.r.fillCircle({o.x + side * rad * 0.55f, o.y - rad * 0.25f}, ball * 1.5f, col);
+            c.r.fillCircle({o.x + side * rad * 0.55f, o.y + rad * 0.3f}, ball * 1.5f, col);
+            c.r.line({o.x + side * rad * 0.55f, o.y - rad * 0.25f}, {o.x + side * rad * 0.55f, o.y + rad * 0.3f}, t, col);
+        }
+        c.r.line({o.x - rad * 0.15f, o.y}, {o.x + rad * 0.15f, o.y}, t, col);
+        break;
+    case gameplay::ModeId::Chaos: { // a die
+        frame(c, {o.x - rad * 0.6f, o.y - rad * 0.6f, rad * 1.2f, rad * 1.2f}, t, col);
+        for (float k : {-0.3f, 0.0f, 0.3f}) c.r.fillCircle({o.x + rad * k, o.y + rad * k}, ball, col);
+        break;
+    }
+    case gameplay::ModeId::Daily: // a sun
+        c.r.ring(o, rad * 0.36f, t, col);
+        for (int i = 0; i < 8; ++i) {
+            const float a = kTau * static_cast<float>(i) / 8.0f + 0.2f;
+            c.r.line({o.x + std::cos(a) * rad * 0.55f, o.y + std::sin(a) * rad * 0.55f}, {o.x + std::cos(a) * rad * 0.82f, o.y + std::sin(a) * rad * 0.82f}, t,
+                     col);
+        }
+        break;
+    }
+}
+
 Vec2 crownSpot(const ScreenContext& c, int s) {
     const Rect& r = c.layout.columns[static_cast<std::size_t>(s)];
     return {r.x + px(c, 122), r.y + px(c, 98)};

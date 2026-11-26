@@ -11,7 +11,8 @@
 namespace spindle::gameplay {
 
 enum class FieldStatus { Idle, Playing, Cleared, Failed };
-enum class FailReason { None, Collision, Timeout };
+// Clock: the blitz match clock ran out mid-round (not a failure: no try, no penalty, no clear bonus).
+enum class FailReason { None, Collision, Timeout, Clock };
 
 struct FieldConfig {
     double needleLength = 0.0;
@@ -38,6 +39,8 @@ inline constexpr double kCloseCallFactor = 1.4;
 struct AttachedNeedle {
     double angle = 0.0; // relative to the rotor
     bool preplaced = false;
+    bool junk = false;       // sabotage: sent by a rival
+    std::uint64_t tick = 0;  // when it stuck (0 for pre-placed needles); blind rounds hide it after a moment
 };
 
 struct FlyingNeedle {
@@ -73,6 +76,8 @@ public:
     void step(std::uint64_t tick, double dt, double angleBefore, double angleDelta);
 
     void failTimeout(std::uint64_t tick);
+    // Blitz: the match clock ran out while this station was still playing.
+    void stopForClock(std::uint64_t tick);
 
     FieldStatus status() const { return status_; }
     FailReason failReason() const { return failReason_; }

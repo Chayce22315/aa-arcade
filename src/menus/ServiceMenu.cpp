@@ -165,6 +165,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(pageItem("game settings", PageId::Game));
         items.push_back(pageItem("coin settings", PageId::Coin));
         items.push_back(pageItem("bot settings", PageId::Bots));
+        items.push_back(pageItem("game modes", PageId::Modes));
         items.push_back(pageItem("bookkeeping", PageId::Bookkeeping));
         items.push_back(pageItem("high scores", PageId::HighScores));
         MenuItem reset = actionItem("reset defaults", [this] {
@@ -396,7 +397,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(intItem("credits per coin", edit_.arcade.creditsPerCoin, 1, 9));
         items.push_back(intItem("credits per player", edit_.arcade.creditsPerGame, 1, 9));
         items.push_back(intItem("max credits", edit_.arcade.maxCredits, 1, 99));
-        items.push_back(intItem("join window", edit_.arcade.joinWindow, 3, 30, 1, " s"));
+        items.push_back(intItem("vote time", edit_.arcade.voteSeconds, 10, 60, 1, " s"));
         items.push_back(intItem("game over time", edit_.arcade.gameOverTime, 3, 30, 1, " s"));
         items.push_back(intItem("initials time", edit_.arcade.initialsSeconds, 10, 30, 1, " s"));
         MenuItem hold = intItem("exit hold", edit_.arcade.exitHoldSeconds, 0, 10, 1, " s");
@@ -452,6 +453,21 @@ void ServiceMenu::build(PageId id) {
         clear.value = [this] { return std::string(pendingConfirm_ == "clear" ? "press again to confirm" : ""); };
         clear.separatorBefore = true;
         items.push_back(std::move(clear));
+        break;
+    }
+    case PageId::Modes: {
+        title = "game modes";
+        items.push_back(intItem("vote time", edit_.arcade.voteSeconds, 10, 60, 1, " s"));
+        for (std::size_t m = 0; m < gameplay::kModeCount; ++m) {
+            MenuItem it = boolItem(std::string(gameplay::modeName(gameplay::kAllModes[m])), edit_.modes.enabled[m]);
+            if (m == 0) it.separatorBefore = true;
+            items.push_back(std::move(it));
+        }
+        MenuItem note;
+        note.label = "with every mode off, battle stays on";
+        note.enabled = false;
+        note.separatorBefore = true;
+        items.push_back(std::move(note));
         break;
     }
     case PageId::HighScores: {

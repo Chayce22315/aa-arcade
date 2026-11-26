@@ -102,6 +102,11 @@ set(SPINDLE_EMBEDDED_FILES
   audio/crown.wav
   audio/letter_shot.wav
   audio/initials_done.wav
+  audio/vote_tick.wav
+  audio/vote_cast.wav
+  audio/wheel_tick.wav
+  audio/wheel_stop.wav
+  audio/mode_intro.wav
   art/flame.png)
 spindle_embed_files(
   OUTPUT ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
@@ -128,6 +133,7 @@ add_library(spindle_core STATIC
   src/gameplay/Playfield.cpp
   src/gameplay/MatchRules.cpp
   src/gameplay/Scoring.cpp
+  src/gameplay/Modes.cpp
   src/gameplay/Match.cpp
   src/players/PlayerManager.cpp
   src/bots/BotRuntime.cpp
@@ -136,6 +142,7 @@ add_library(spindle_core STATIC
   src/arcade/Bookkeeping.cpp
   src/arcade/HighScores.cpp
   src/arcade/InitialsEntry.cpp
+  src/arcade/VoteBox.cpp
   src/arcade/ArcadeMachine.cpp
   src/input/Keybinds.cpp
   src/input/TouchZones.cpp
@@ -231,6 +238,8 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestScoring.cpp
     tests/TestHighScores.cpp
     tests/TestInitials.cpp
+    tests/TestModes.cpp
+    tests/TestVote.cpp
     tests/TestPlayerManager.cpp
     tests/TestBots.cpp
     tests/TestCredits.cpp

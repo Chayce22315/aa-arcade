@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <memory>
+#include <string>
 
 #include "Test.hpp"
 #include "bots/BotController.hpp"
@@ -188,4 +190,41 @@ TEST_CASE(bots_catch_fire_and_never_stall_with_the_fire_meter) {
     }
     CHECK(expertIgnitions >= 3);
     CHECK(expertBurnt >= 1);
+}
+
+TEST_CASE(bots_finish_a_match_with_one_winner_in_every_mode) {
+    for (gameplay::ModeId mode : gameplay::kAllModes) {
+        gameplay::LevelScript levels;
+        gameplay::MatchConfig c;
+        c.seed = 4242;
+        c.tries = 1;
+        c.tally = gameplay::scoring::TallyStyle::Off;
+        c.mode = gameplay::modeRules(mode);
+        c.mode.clockSeconds = std::min(c.mode.clockSeconds, 40.0); // shorter blitz / race / crown for the test
+        if (c.mode.end == gameplay::MatchEnd::FirstTo) c.mode.target = 2;
+        if (c.mode.end == gameplay::MatchEnd::Rounds) c.mode.target = 3;
+        std::vector<gameplay::ParticipantSpec> specs;
+        std::array<std::unique_ptr<bots::BotController>, 4> bots;
+        for (int s = 0; s < 4; ++s) {
+            specs.push_back({s, gameplay::ParticipantKind::Bot});
+            bots[static_cast<std::size_t>(s)] = makeBot(config::Difficulty::Normal, 977u + static_cast<std::uint32_t>(s));
+        }
+        gameplay::Match m(c, specs, levels);
+        for (int i = 0; i < 900 * gameplay::geom::kTickRate && !m.over(); ++i) {
+            std::array<int, 4> fire{};
+            if (m.phase() == gameplay::MatchPhase::Playing)
+                for (int s = 0; s < 4; ++s)
+                    if (m.stationInRound(s))
+                        fire[static_cast<std::size_t>(s)] =
+                            bots[static_cast<std::size_t>(s)]->think(m.rotor().state(), m.field(s), m.roundTime(), m.roundTimeLeft(), m.tickCount() + 1);
+            m.tick(fire);
+            for (const auto& e : m.takeEvents())
+                if (e.type == gameplay::MatchEventType::RoundStarted)
+                    for (auto& b : bots) b->beginRound(m.mutator() == gameplay::Mutator::Blind);
+        }
+        const std::string what(gameplay::modeKey(mode));
+        if (!m.over()) test::fail(__FILE__, __LINE__, what + " never ended");
+        if (m.winnerStation() < 0 || m.winnerStation() >= 4) test::fail(__FILE__, __LINE__, what + " has no winner");
+        if (m.standings().front() != m.winnerStation()) test::fail(__FILE__, __LINE__, what + ": the winner is not first in the standings");
+    }
 }

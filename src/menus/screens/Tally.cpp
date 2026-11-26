@@ -109,8 +109,8 @@ void drawTallyStation(const ScreenContext& c, const gameplay::Match& m, int s) {
     if (e >= t.breakdownStart()) {
         const double step = t.breakdown / 3.0;
         const std::string lines[3] = {std::format("total  {}", p.score), std::format("round  +{}", p.roundPoints),
-                                      std::format("bonus  +{}", p.roundBonus)};
-        const Color cols[3] = {colors::kWhite, colors::kWhite, p.roundBonus > 0 ? kFireHot : colors::kDim};
+                                      std::format("bonus  {}{}", p.roundBonus >= 0 ? "+" : "", p.roundBonus)};
+        const Color cols[3] = {colors::kWhite, colors::kWhite, p.roundBonus > 0 ? kFireHot : p.roundBonus < 0 ? kMissRed : colors::kDim};
         for (int k = 0; k < 3; ++k) {
             const double since = e - (t.breakdownStart() + step * k);
             if (since < 0.0) break;

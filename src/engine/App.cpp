@@ -94,6 +94,9 @@ input::TouchContext App::touchContext() const {
         }
     } else {
         c.screen = input::TouchScreen::Lobby;
+        // On the vote screen a joined column picks and votes (with one mode on, a tap simply starts).
+        if (arcade_->state() == arcade::ArcadeState::Vote && arcade_->votePhase() == arcade::VotePhase::Voting && arcade_->vote().modes().size() > 1)
+            for (std::size_t i = 0; i < 4; ++i) c.voting[i] = arcade_->vote().joined(static_cast<int>(i));
     }
     return c;
 }

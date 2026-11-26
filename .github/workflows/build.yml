@@ -129,7 +129,7 @@ jobs:
     name: Android self-test (emulator)
     needs: android
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -160,7 +160,7 @@ jobs:
   ios:
     name: iOS (device .ipa, simulator build + self-test)
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Configure (Xcode, iOS simulator)
@@ -200,7 +200,7 @@ jobs:
           name: spindle-ios-unsigned-ipa
           path: spindle-ios-unsigned.ipa
       - name: Run the four-station self-test in the iOS simulator
-        timeout-minutes: 25
+        timeout-minutes: 45
         run: python3 ci/ios_selftest.py build/ios/Release-iphonesimulator/spindle.app selftest-ios
       - name: Package the simulator app
         if: always()

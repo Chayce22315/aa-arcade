@@ -23,6 +23,8 @@ aa2 or any other title.
 - **Fire meter**: quick needles fill your flame and close calls count double; when it is full you are
   on fire for 1.5 s and your needles burn through anything they touch
   ([docs/RULES.md](docs/RULES.md#fire-meter)).
+- **Nine game modes, chosen by vote**: battle, marathon, blitz, race, crown, sabotage, teams, chaos and
+  daily. Players vote on the join screen; a tie spins a wheel ([docs/RULES.md](docs/RULES.md#game-modes)).
 - **Score, round end screen and crown**: every round ends with each total shot into its circle digit
   by digit, then total / round / bonus; the round's top scorer takes the crown (and a rainbow circle)
   until someone beats them ([docs/RULES.md](docs/RULES.md#score)).
@@ -46,7 +48,7 @@ aa2 or any other title.
 |---|---|---|---|---|
 | Fire | Left Ctrl | A | Right Ctrl | L |
 | Start / join | 1 | 2 | 3 | 4 |
-| Left / right (initials) | W / D | J / K | Left / Right | F / H |
+| Left / right (vote, initials) | W / D | J / K | Left / Right | F / H |
 
 Coin `5`, service coin `9`, service menu `F2`, hold `Escape` (2 s) to quit. Controllers: any face
 button or shoulder fires, Start joins, Back inserts a coin, the d-pad or left stick picks letters. All of it is configurable in

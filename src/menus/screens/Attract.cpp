@@ -101,7 +101,7 @@ void drawTable(const ScreenContext& c, const arcade::HighScoreTable& t, float ce
 void drawHighScores(const ScreenContext& c) {
     const float cx = midX(c);
     const auto& hs = c.arcade.highScores();
-    const std::string_view table = c.arcade.scoreTable();
+    const std::string_view table = c.arcade.attractTable();
     textAt(c, "high scores", cx, areaY(c, 90), 48, colors::kWhite);
     textAt(c, table, cx, areaY(c, 168), 20, colors::kDim);
     const auto& t = hs.tables(table);

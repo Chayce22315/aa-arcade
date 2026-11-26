@@ -23,6 +23,7 @@ struct Lineup {
 struct BotFill {
     int singleplayerBots = 3; // 0..3
     int multiplayerBots = 0;  // 0..2
+    bool fillAll = false;     // teams: bots take every free station so both teams are full
 };
 
 // Mode rule: exactly one human = singleplayer, two or more = multiplayer. Bots take the lowest free

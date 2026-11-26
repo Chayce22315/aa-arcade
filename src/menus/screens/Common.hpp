@@ -68,6 +68,10 @@ void drawStationStatus(const ScreenContext& c, int s, std::string_view text, Col
 // A stroke-drawn crown; `base` is the middle of its band, `size` its width in screen pixels.
 void drawCrown(const ScreenContext& c, Vec2 base, float size, Color col);
 Vec2 crownSpot(const ScreenContext& c, int s); // where a station's crown sits, next to its header
+// A game mode's mark, drawn with lines inside a circle of `radius` (screen pixels).
+void drawModeIcon(const ScreenContext& c, gameplay::ModeId mode, Vec2 centre, float radius, Color col);
+// A rectangle outline.
+void frame(const ScreenContext& c, const Rect& r, float thickness, Color col);
 
 // ------------------------------------------------------------------ screens (one file each)
 void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo);       // Field.cpp
@@ -78,7 +82,7 @@ void drawTitle(const ScreenContext& c);                                         
 void drawHowTo(const ScreenContext& c);
 void drawHighScores(const ScreenContext& c);
 void drawInsertCoin(const ScreenContext& c);
-void drawJoin(const ScreenContext& c);                                              // Lobby.cpp
+void drawVote(const ScreenContext& c);                                              // Lobby.cpp
 void drawInitialsState(const ScreenContext& c);                                     // Results.cpp
 void drawGameOver(const ScreenContext& c);
 void drawSuspendedOverlay(const ScreenContext& c);

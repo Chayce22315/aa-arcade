@@ -21,10 +21,7 @@ void drawArcade(const ScreenContext& c) {
         }
         break;
     case arcade::ArcadeState::InsertCoin: drawInsertCoin(c); break;
-    case arcade::ArcadeState::Join:
-        dividers(c);
-        drawJoin(c);
-        break;
+    case arcade::ArcadeState::Vote: drawVote(c); break;
     case arcade::ArcadeState::Playing:
         dividers(c);
         if (const gameplay::Match* m = a.match()) drawMatch(c, *m, false);
