@@ -51,6 +51,7 @@ void drawArcade(const ScreenContext& c) {
         case arcade::AttractPage::WhatsNew: drawWhatsNew(c); break;
         case arcade::AttractPage::HowTo: drawHowTo(c); break;
         case arcade::AttractPage::Demo:
+        case arcade::AttractPage::Replay:
             dividers(c);
             if (const gameplay::Match* m = a.match()) drawMatch(c, *m, true);
             break;

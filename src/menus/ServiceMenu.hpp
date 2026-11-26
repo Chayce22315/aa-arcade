@@ -38,6 +38,7 @@ public:
     virtual void saveBookkeeping() = 0;
     virtual void saveHighScores() = 0;
     virtual void saveProgress() = 0;
+    virtual void saveReplays() = 0; // writes each mode's record game, removes the files of cleared ones
     virtual void requestShutdown() = 0;
     virtual double frameMilliseconds() const = 0;
 };
@@ -69,12 +70,14 @@ public:
     std::optional<render::Vec2> rowPoint(int index) const;
 
 private:
-    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores, PlayerOptions, Progress };
+    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores, PlayerOptions, Progress, DailyCode };
     enum class Capture { None, Key, Controller, Keyboard };
 
     void show(PageId id);
     void addFeedbackItems(std::vector<MenuItem>& items);
     void addLookItems(std::vector<MenuItem>& items, bool unlockedOnly);
+    std::string codeDraft_ = std::string(12, '0'); // the daily code being checked
+    int codePos_ = 0;
     void build(PageId id);
     void close(bool save);
     bool confirm(const std::string& key);

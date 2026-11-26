@@ -76,6 +76,17 @@ add_subdirectory(third_party/lua-5.4.7)
 
 # ---------------------------------------------------------------- generated sources
 set(SPINDLE_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+# The commit goes into the replay build id (replays from another build are not shown). Read at configure
+# time; "unknown" outside a git checkout.
+set(SPINDLE_GIT_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+  execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE SPINDLE_GIT_COMMIT_OUT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE SPINDLE_GIT_RESULT)
+  if(SPINDLE_GIT_RESULT EQUAL 0 AND SPINDLE_GIT_COMMIT_OUT)
+    set(SPINDLE_GIT_COMMIT "${SPINDLE_GIT_COMMIT_OUT}")
+  endif()
+endif()
 configure_file(cmake/Version.hpp.in ${SPINDLE_GENERATED_DIR}/spindle/Version.hpp @ONLY)
 
 set(SPINDLE_EMBEDDED_FILES
@@ -144,6 +155,8 @@ add_library(spindle_core STATIC
   src/arcade/Bookkeeping.cpp
   src/arcade/HighScores.cpp
   src/arcade/Progress.cpp
+  src/arcade/Replay.cpp
+  src/arcade/DailyCode.cpp
   src/arcade/InitialsEntry.cpp
   src/arcade/VoteBox.cpp
   src/arcade/ArcadeMachine.cpp
@@ -250,6 +263,8 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestHighScores.cpp
     tests/TestProgress.cpp
     tests/TestMusic.cpp
+    tests/TestReplay.cpp
+    tests/TestDailyCode.cpp
     tests/TestInitials.cpp
     tests/TestModes.cpp
     tests/TestVote.cpp

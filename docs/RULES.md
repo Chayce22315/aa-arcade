@@ -236,6 +236,27 @@ pause; the numbers appear at once).
   higher score.
 - The attract loop shows the tables; the service menu shows and clears them.
 
+## Replays
+
+Every match humans play is recorded: its exact settings, its line-up and every fire press of every station
+(CPUs included), tick by tick. When a match puts a player at the top of its mode's table (today's table
+for daily), the match is kept as that mode's record game in `replays/<mode>.txt`, with the record holder's
+name. Two players topping the table in the same match: the higher score names it (it is the same game).
+
+On the attract loop, a mode's record game plays (the first 75 seconds at most) just before that mode's
+high score table, with "record game", the name and the score on screen. A replay needs no CPUs: the match
+is deterministic, so the presses alone play the same game. Replays are only shown by the build that
+recorded them, with the same level script (a build id of version, commit and level script hash); others
+are skipped and the log says why. Clearing the high scores clears the replays too.
+
+## Daily score code
+
+The results of a daily game show each player a 12-character code (`XXXX-XXXX-XXXX`) that carries the
+date and the score with a check made from SHA-256, so a friend (or the operator, on the service menu's
+"daily code check" page) can see a typo at once. It proves nothing: spindle is open source, so anyone can
+make a valid code for any score. Codes read leniently: any case, dashes optional, O read as 0 and I or L
+as 1.
+
 ## Achievements
 
 The cabinet keeps lifetime stats and 14 achievements in `progress.ini`. spindle has no player accounts,

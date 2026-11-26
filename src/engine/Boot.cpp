@@ -16,6 +16,7 @@
 #include "assets/ControllerDbPin.hpp"
 #include "assets/EmbeddedAssets.hpp"
 #include "assets/PngInfo.hpp"
+#include "assets/Sha256.hpp"
 #include "config/AtomicFile.hpp"
 #include "config/IniDocument.hpp"
 #include "engine/App.hpp"
@@ -238,6 +239,25 @@ bool App::bootArcade() {
         log::info("high scores: loaded");
     }
     arcade_->setToday(localIsoDate());
+    {
+        // Replays only play back on the build (and level script) that recorded them.
+        const auto levelsText = levelOverride_ ? std::optional<std::string_view>(levelOverride_->code) : assets::embeddedText("scripts/levels.lua");
+        const std::string levelsHash = assets::sha256Hex(levelsText.value_or(std::string_view{})).substr(0, 10);
+        arcade_->setReplayBuild(std::format("{}+{}+{}", kVersion, kGitCommit, levelsHash));
+        int loaded = 0;
+        for (gameplay::ModeId m : gameplay::kAllModes) {
+            const auto path = paths_.replay(gameplay::modeKey(m));
+            auto text = config::readFile(path);
+            if (!text) continue;
+            std::string why;
+            if (auto r = arcade::Replay::parse(*text, &why)) {
+                if (r->mode == m && arcade_->setReplay(std::move(*r))) ++loaded;
+            } else {
+                log::warn("replays: {} is damaged ({}); ignored", pathToUtf8(path), why);
+            }
+        }
+        log::info("replays: {} record game(s) to show", loaded);
+    }
     if (auto text = config::readFile(paths_.progress())) {
         arcade_->setProgress(arcade::Progress::parse(config::IniDocument::parse(*text)));
         log::info("progress: {} matches, {} of {} achievements", arcade_->progress().stats().matches, arcade_->progress().earnedCount(),

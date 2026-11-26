@@ -29,7 +29,7 @@ void drawModeBanner(const ScreenContext& c, const gameplay::Match& m, bool demo)
     case gameplay::ModeId::Daily: line += std::format("  {}", c.arcade.highScores().today()); break;
     default: break;
     }
-    if (demo) line = "demo  " + line;
+    if (demo) line = (c.arcade.showingReplay() ? "replay  " : "demo  ") + line;
     if (m.suddenDeath()) line = "sudden death";
     if (m.phase() == gameplay::MatchPhase::Ready) {
         textAt(c, std::format("round {}", m.round()), cx, areaY(c, 4), 30, colors::kWhite);
@@ -372,7 +372,11 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
     }
     drawCrownLayer(c, m);
     if (m.phase() != gameplay::MatchPhase::Over && m.phase() != gameplay::MatchPhase::Tally) drawModeBanner(c, m, demo);
-    if (demo) {
+    if (const arcade::Replay* r = c.arcade.showingReplay(); demo && r) {
+        band(c, 540, 130, 0.85f); // whose record this is, and the call to play
+        textAt(c, std::format("record game  {}  {}", r->name, r->score), midX(c), areaY(c, 552), 24, kGold);
+        if (blink(c.time)) textAt(c, startPrompt(c), midX(c), areaY(c, 604), 36, colors::kWhite);
+    } else if (demo) {
         band(c, 570, 90, 0.85f); // the call to play stays readable over four busy circles
         if (blink(c.time)) textAt(c, startPrompt(c), midX(c), areaY(c, 594), 40, colors::kWhite);
     }

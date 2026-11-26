@@ -214,3 +214,16 @@ player catches fire. The arcade machine only says where the music should head (`
 an intensity from the humans' fire meters); the synth fades its layers towards that. It is pure code,
 so the tests render it to check it never clips and stays finite. The sound itself is a starting point
 to be tuned by ear.
+
+**Replays record every press, CPUs included.** Re-running the CPUs would make a replay depend on the bot
+script and its random numbers staying the same; recording their presses means the match itself (already
+deterministic for its seed, config and presses, which the tests check) is all a replay needs. Doubles in
+the replay file are written as their bits so nothing is lost to rounding. The build id (version, commit,
+level script hash) keeps a replay from playing on a build whose rules might differ; replays are not
+re-simulated at boot, which would cost seconds on a phone. A record row loses its reservation token when
+the name is typed, so the machine notes at that moment whether the row heads the table. On the attract
+loop a replay is cut at 75 s so a long record game does not hold the loop.
+
+**The daily code is a typo check.** Twelve base32 characters hold 60 bits: 16 for the day since
+2024-01-01, 24 for the score (the score cap fits) and 20 from SHA-256 of the date and score. Without a
+secret it cannot prove anything, and spindle is open source, so the docs say so plainly.

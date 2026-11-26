@@ -5,6 +5,7 @@
 #include <format>
 #include <numbers>
 
+#include "arcade/DailyCode.hpp"
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
 #include "gameplay/Powerups.hpp"
@@ -232,6 +233,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(pageItem("bookkeeping", PageId::Bookkeeping));
         items.push_back(pageItem("high scores", PageId::HighScores));
         items.push_back(pageItem("progress", PageId::Progress));
+        items.push_back(pageItem("daily code check", PageId::DailyCode));
         MenuItem reset = actionItem("reset defaults", [this] {
             if (confirm("reset")) {
                 edit_ = host_.defaultSettings();
@@ -592,6 +594,8 @@ void ServiceMenu::build(PageId id) {
             if (confirm("clear scores")) {
                 hs.clearAll();
                 host_.saveHighScores();
+                host_.arcadeMachine().clearReplays(); // a record game without its table means nothing
+                host_.saveReplays();
                 notice_ = "high scores cleared";
                 noticeTime_ = 3.0;
                 rebuildPending_ = true;
@@ -600,6 +604,50 @@ void ServiceMenu::build(PageId id) {
         clear.value = [this] { return std::string(pendingConfirm_ == "clear scores" ? "press again to confirm" : ""); };
         clear.separatorBefore = true;
         items.push_back(std::move(clear));
+        break;
+    }
+    case PageId::DailyCode: {
+        title = "daily code check";
+        MenuItem code;
+        code.label = "code";
+        code.enabled = false;
+        code.value = [this] {
+            std::string shown;
+            for (int i = 0; i < 12; ++i) {
+                if (i > 0 && i % 4 == 0) shown += '-';
+                shown += i == codePos_ ? std::format("[{}]", codeDraft_[static_cast<std::size_t>(i)]) : std::string(1, codeDraft_[static_cast<std::size_t>(i)]);
+            }
+            return shown;
+        };
+        items.push_back(std::move(code));
+        MenuItem pos;
+        pos.label = "position";
+        pos.value = [this] { return std::to_string(codePos_ + 1); };
+        pos.adjust = [this](int d) { codePos_ = ((codePos_ + d) % 12 + 12) % 12; };
+        items.push_back(std::move(pos));
+        MenuItem ch;
+        ch.label = "character";
+        ch.value = [this] { return std::string(1, codeDraft_[static_cast<std::size_t>(codePos_)]); };
+        ch.adjust = [this](int d) {
+            char& c = codeDraft_[static_cast<std::size_t>(codePos_)];
+            const auto at = static_cast<int>(arcade::kCodeAlphabet.find(c));
+            const int n = static_cast<int>(arcade::kCodeAlphabet.size());
+            c = arcade::kCodeAlphabet[static_cast<std::size_t>(((std::max(0, at) + d) % n + n) % n)];
+        };
+        items.push_back(std::move(ch));
+        MenuItem result;
+        result.label = "result";
+        result.enabled = false;
+        result.separatorBefore = true;
+        result.value = [this] {
+            const auto r = arcade::checkDailyCode(codeDraft_);
+            return r ? std::format("valid: {} scored {}", r->date, r->score) : std::string("not a valid code");
+        };
+        items.push_back(std::move(result));
+        MenuItem note;
+        note.label = "codes catch typos, not cheats";
+        note.enabled = false;
+        items.push_back(std::move(note));
         break;
     }
     case PageId::Progress: {

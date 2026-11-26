@@ -6,6 +6,7 @@
 #include <format>
 #include <string>
 
+#include "arcade/DailyCode.hpp"
 #include "menus/screens/Common.hpp"
 
 namespace spindle::menus::screens {
@@ -122,6 +123,13 @@ void drawGameOver(const ScreenContext& c) {
                                                                       : std::format("rounds cleared {}", res->roundsCleared[i]);
         textAt(c, extra, x, col.y + px(c, 510), 18, colors::kWhite);
         if (!prizes[i].empty()) textAt(c, prizes[i], x, col.y + px(c, 590), 20, kGold);
+        // Daily: a code to share the score (a typo check, not proof).
+        if (res->gameMode == gameplay::ModeId::Daily && !bot)
+            if (const auto code = arcade::dailyCode(res->date, res->scores[i])) {
+                textAt(c, "daily code", x, col.y + px(c, 650), 14, colors::kDim);
+                const std::string shown = arcade::formatDailyCode(*code);
+                c.r.text(shown, {x, col.y + px(c, 676)}, fitCap(shown, col.w - px(c, 30), capPx(c, 20)), colors::kWhite, Align::Center);
+            }
     }
 }
 

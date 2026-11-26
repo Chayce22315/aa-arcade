@@ -564,6 +564,22 @@ void SelfTest::build() {
     add("let the screen open (08_game_over)", settle(0.6)); // the iris and any intro animation
     shot("08_game_over");
     waitFor("game over: back to attract with no credits", [A] { return A().state() == ArcadeState::Attract; }, 10);
+    // The four-station match made the battle record (P4's win), so the attract loop replays that match
+    // before the battle table.
+    waitFor("attract: the record game is replayed", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::Replay; }, 120);
+    add("attract: the replay is the battle record's match", [this, A] {
+        const arcade::Replay* r = A().showingReplay();
+        const auto& rows = A().highScores().tables("battle").allTime.rows();
+        check(r && !rows.empty() && r->name == rows.front().name && r->score == rows.front().score && r->mode == gameplay::ModeId::Battle,
+              std::format("replay '{}' {}", r ? r->name : "-", r ? r->score : 0));
+        std::error_code ec;
+        check(std::filesystem::exists(app_.paths().replay("battle"), ec), "replays/battle.txt not written");
+        return true;
+    });
+    waitFor("attract: the replay plays for a while", [A, M] {
+        return A().attractPage() == AttractPage::Replay && M() && M()->round() >= 2 && M()->phase() == gameplay::MatchPhase::Playing && M()->roundTime() > 1.5;
+    }, 60);
+    shot("27_replay");
     waitFor("attract: the high score page comes round", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::HighScores; },
             120);
     add("attract: let the table draw", settle(0.5));

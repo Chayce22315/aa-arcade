@@ -22,6 +22,7 @@ enum class ParticipantKind { Human, Bot };
 struct ParticipantSpec {
     int station = 0;
     ParticipantKind kind = ParticipantKind::Human;
+    bool operator==(const ParticipantSpec&) const = default;
 };
 
 struct Participant {
@@ -80,6 +81,7 @@ struct MatchConfig {
 
     // The game mode: how rounds are scored and how the match ends.
     ModeRules mode{};
+    bool operator==(const MatchConfig&) const = default;
 };
 
 // Tally: the round end screen (scores typed in, the crown moves) before the next round or the end.

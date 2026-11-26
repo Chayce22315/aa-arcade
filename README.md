@@ -33,6 +33,8 @@ aa2 or any other title.
 - **Phones and tablets**: Android and iOS builds of the same game. Tap your column to join and to fire
   (anywhere, when you play alone against bots), up to four players around one tablet, pause when the
   app goes to the background, layout kept clear of notches ([docs/BUILDING.md](docs/BUILDING.md#android)).
+- **Replays**: each mode's record game is kept and replayed on the attract loop before its table;
+  daily games give a shareable score code ([docs/RULES.md](docs/RULES.md#replays)).
 - **Achievements**: 14 for the machine, from "first pin" to "tourist", popping up in your column;
   three of them unlock looks (blue flames, a royal crown, comet trails) ([docs/RULES.md](docs/RULES.md#achievements)).
 - **Live music**: synthesized as it plays, calm on attract and building with the players' fire meters
@@ -68,6 +70,7 @@ button or shoulder fires, Start joins, Back inserts a coin, the d-pad or left st
 | `bookkeeping.ini` | coin and game counters, recent winners |
 | `highscores.ini` | the high score tables (all time and today) |
 | `progress.ini` | lifetime stats, achievements and the looks they unlock |
+| `replays/` | each mode's record game, replayed on the attract loop |
 | `logs/spindle.log` | boot steps, warnings and errors |
 | `gamecontrollerdb.txt` | optional, downloaded and verified automatically |
 

@@ -52,8 +52,9 @@ player colours. Leaving it (done, back, or the back button) saves. It never show
 | bot settings | Bots with one player, bots with two or more players, bot difficulty, demo difficulty. |
 | game modes | Vote time and each of the nine game modes on/off (with every mode off, battle stays on). |
 | bookkeeping | Coins, service credits, singleplayer and multiplayer games, wins by players and by bots, play time, the last five winners; "clear bookkeeping" (press twice). |
+| daily code check | Type a daily score code (position and character) and see the date and score it carries, or "not a valid code". A typo check, not proof. |
 | progress | Lifetime stats, every achievement (earned, or how to earn it), the unlockable looks (on / off once unlocked, saved at once) and "reset progress" (press twice). Saved in progress.ini. |
-| high scores | Every mode's tables (all time and today) with name, score, round and date; "clear high scores" (press twice). Saved in highscores.ini. |
+| high scores | Every mode's tables (all time and today) with name, score, round and date; "clear high scores" (press twice), which also clears the record replays. Saved in highscores.ini. |
 | reset defaults | Loads all defaults into the menu (press twice); Save & Exit keeps them. |
 | save & exit | Applies every change at once (input, audio, display, credits, bots) and writes settings.ini, keeping its comments. |
 | exit without saving | Discards every change, including previewed video and volume changes. |

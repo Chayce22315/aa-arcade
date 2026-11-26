@@ -14,6 +14,7 @@
 #include "arcade/HighScores.hpp"
 #include "audio/MusicSynth.hpp"
 #include "arcade/Progress.hpp"
+#include "arcade/Replay.hpp"
 #include "arcade/InitialsEntry.hpp"
 #include "arcade/VoteBox.hpp"
 #include "audio/SoundId.hpp"
@@ -30,7 +31,7 @@ namespace spindle::arcade {
 enum class ArcadeState { Attract, InsertCoin, Vote, Playing, Initials, GameOver };
 // Inside Vote: voting (joining still open), the tie-break wheel, then the chosen mode's card.
 enum class VotePhase { Voting, Spin, Intro };
-enum class AttractPage { Title, WhatsNew, HowTo, Demo, HighScores, Stats };
+enum class AttractPage { Title, WhatsNew, HowTo, Demo, Replay, HighScores, Stats };
 
 struct StationButtons {
     int firePresses = 0;
@@ -48,16 +49,18 @@ struct ArcadeInput {
     int serviceCredits = 0;
 };
 
-enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused, Haptic, SaveProgress };
+enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused, Haptic, SaveProgress, SaveReplay };
 
 struct ArcadeEvent {
     ArcadeEventType type = ArcadeEventType::Sound;
     audio::SoundId sound = audio::SoundId::Coin;
     int station = -1; // Haptic: the human station that feels it, -1 = every human
     HapticKind haptic = HapticKind::Tick;
+    gameplay::ModeId mode = gameplay::ModeId::Battle; // SaveReplay: whose record changed
 };
 
 struct MatchResult {
+    std::string date; // the local date the match started (daily codes)
     players::GameMode mode = players::GameMode::Singleplayer;
     players::Lineup lineup;
     int winner = -1;
@@ -135,6 +138,17 @@ public:
         float intensity = 0.0f;
     };
     MusicCue musicCue() const;
+
+    // Replays (docs/RULES.md "Replays"): the build id written into new ones, and each mode's record game.
+    void setReplayBuild(std::string build) { replayBuild_ = std::move(build); }
+    const std::string& replayBuild() const { return replayBuild_; }
+    // Takes a saved replay; refused (false) when another build recorded it.
+    bool setReplay(Replay r);
+    const std::optional<Replay>& replay(gameplay::ModeId mode) const { return replays_[static_cast<std::size_t>(mode)]; }
+    void clearReplays();
+    // The record being shown on the attract loop (Replay page), if any.
+    const Replay* showingReplay() const { return replayShowing_ ? &*replays_[static_cast<std::size_t>(*replayShowing_)] : nullptr; }
+    static constexpr double kReplayMaxTime = 75.0;
 
     void setProgress(Progress p) { progress_ = std::move(p); }
     const Progress& progress() const { return progress_; }
@@ -221,6 +235,15 @@ private:
     std::optional<MatchResult> lastResult_;
     HighScores highScores_;
     Progress progress_;
+    ReplayRecorder recorder_;
+    std::string replayBuild_ = "unknown";
+    std::array<std::optional<Replay>, gameplay::kModeCount> replays_{};
+    std::optional<gameplay::ModeId> replayShowing_;
+    std::optional<ReplayPlayer> replayPlayer_;
+    std::array<bool, gameplay::kMaxStations> entryTop_{}; // finished their initials at the top of the table
+    int replayKeptFor_ = -1;
+    std::string matchDate_;                              // the station whose name the kept replay carries
+    void maybeKeepReplay();
     std::array<std::optional<Toast>, gameplay::kMaxStations> toasts_{};
     std::array<std::vector<Achievement>, gameplay::kMaxStations> toastQueue_{};
     StationProgress stationProgress(int station) const;

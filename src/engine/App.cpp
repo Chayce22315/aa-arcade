@@ -288,6 +288,7 @@ void App::handleArcadeEvents() {
         case arcade::ArcadeEventType::SaveBookkeeping: saveBookkeeping(); break;
         case arcade::ArcadeEventType::SaveHighScores: saveHighScores(); break;
         case arcade::ArcadeEventType::SaveProgress: progressDirty_ = true; break; // once per tick, however many
+        case arcade::ArcadeEventType::SaveReplay: saveReplay(e.mode); break;
         case arcade::ArcadeEventType::JoinRefused: audio_.play(audio::SoundId::MenuMove); break;
         default: break;
         }
@@ -380,6 +381,22 @@ void App::saveProgress() {
     progressDirty_ = false;
     std::string err;
     if (!config::writeFileAtomic(paths_.progress(), arcade_->progress().serialize(), &err)) log::error("progress: save failed: {}", err);
+}
+
+void App::saveReplay(gameplay::ModeId mode) {
+    const auto path = paths_.replay(gameplay::modeKey(mode));
+    std::error_code ec;
+    if (const auto& r = arcade_->replay(mode)) {
+        std::filesystem::create_directories(path.parent_path(), ec);
+        std::string err;
+        if (!config::writeFileAtomic(path, r->serialize(), &err)) log::error("replays: save failed: {}", err);
+    } else {
+        std::filesystem::remove(path, ec);
+    }
+}
+
+void App::saveReplays() {
+    for (gameplay::ModeId m : gameplay::kAllModes) saveReplay(m);
 }
 
 void App::saveHighScores() {

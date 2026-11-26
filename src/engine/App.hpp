@@ -64,6 +64,8 @@ public:
     void saveBookkeeping() override;
     void saveHighScores() override;
     void saveProgress() override;
+    void saveReplays() override;
+    void saveReplay(gameplay::ModeId mode);
     void requestShutdown() override { requestQuit(0); }
     double frameMilliseconds() const override { return frameMs_; }
 

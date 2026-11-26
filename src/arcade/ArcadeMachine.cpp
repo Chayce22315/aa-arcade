@@ -162,6 +162,8 @@ void ArcadeMachine::setWhatsNew(std::vector<std::string> lines, std::string vers
 void ArcadeMachine::enterAttractPage(AttractPage p) {
     attractPage_ = p;
     pageTime_ = 0.0;
+    replayPlayer_.reset();
+    replayShowing_.reset();
     if (p == AttractPage::WhatsNew) { // seen once is enough
         bookkeeping_.seenVersion = whatsNewVersion_;
         ArcadeEvent e;
@@ -172,6 +174,25 @@ void ArcadeMachine::enterAttractPage(AttractPage p) {
     if (p != AttractPage::Demo) {
         match_.reset();
         for (auto& b : bots_) b.reset();
+    }
+    if (p == AttractPage::Replay) {
+        const auto mode = static_cast<gameplay::ModeId>(attractTable_);
+        const auto& r = replays_[static_cast<std::size_t>(mode)];
+        if (r) {
+            currentMode_ = mode;
+            lineup_ = players::Lineup{};
+            lineup_.mode = players::GameMode::Demo;
+            for (const auto& spec : r->participants) {
+                lineup_.seats[static_cast<std::size_t>(spec.station)] =
+                    spec.kind == gameplay::ParticipantKind::Bot ? players::SeatKind::Bot : players::SeatKind::Human;
+                ++(spec.kind == gameplay::ParticipantKind::Bot ? lineup_.bots : lineup_.humans);
+            }
+            match_ = std::make_unique<gameplay::Match>(r->config, r->participants, levels_);
+            replayPlayer_.emplace(*r);
+            replayShowing_ = mode;
+            demoOverTime_ = 0.0;
+            updatePause();
+        }
     }
 }
 
@@ -219,6 +240,8 @@ void ArcadeMachine::startMatch(gameplay::ModeId mode) {
     fill.fillAll = gameplay::modeRules(mode).teams; // teams always seats four
     lineup_ = players::buildLineup(joined_, fill);
     match_ = std::make_unique<gameplay::Match>(matchConfig(false, mode), lineup_.participants(), levels_);
+    recorder_.begin(match_->config(), lineup_.participants(), mode, replayBuild_);
+    matchDate_ = std::string(highScores_.today());
     for (int s = 0; s < gameplay::kMaxStations; ++s) {
         auto& b = bots_[static_cast<std::size_t>(s)];
         b.reset();
@@ -238,6 +261,8 @@ void ArcadeMachine::startMatch(gameplay::ModeId mode) {
     for (auto& e : entries_) e.reset();
     entryPending_.fill(false);
     entryChecked_.fill(false);
+    entryTop_.fill(false);
+    replayKeptFor_ = -1;
     events_.push_back({ArcadeEventType::MatchStarted, audio::SoundId::RoundStart, -1});
     events_.push_back({ArcadeEventType::SaveBookkeeping, audio::SoundId::Coin, -1});
     state_ = ArcadeState::Playing;
@@ -260,6 +285,7 @@ void ArcadeMachine::endMatch() {
         }
     r.gameMode = currentMode_;
     r.winningTeam = match_->winningTeam();
+    r.date = matchDate_;
     if (r.winner >= 0) {
         const bool bot = lineup_.seats[static_cast<std::size_t>(r.winner)] == players::SeatKind::Bot;
         bookkeeping_.addWinner({r.winner, bot, r.finalRound});
@@ -282,6 +308,8 @@ void ArcadeMachine::endMatch() {
     log::info("arcade: match over after round {}: {}", r.finalRound,
               r.winner >= 0 ? "winner P" + std::to_string(r.winner + 1) : std::string("no winner (single participant)"));
     lastResult_ = std::move(r);
+    recorder_.finish(*match_);
+    maybeKeepReplay();
     events_.push_back({ArcadeEventType::MatchEnded, audio::SoundId::Winner, -1});
     events_.push_back({ArcadeEventType::SaveBookkeeping, audio::SoundId::Coin, -1});
     // Everyone still to be offered a table (survivors, the winner, the last round's knock-outs) gets
@@ -291,6 +319,48 @@ void ArcadeMachine::endMatch() {
     state_ = anyEntering ? ArcadeState::Initials : ArcadeState::GameOver;
     stateTime_ = 0.0;
     entriesDoneTime_ = 0.0;
+}
+
+bool ArcadeMachine::setReplay(Replay r) {
+    if (r.build != replayBuild_) {
+        log::info("replays: the {} record was made by build '{}' (this is '{}'); not shown", gameplay::modeKey(r.mode), r.build, replayBuild_);
+        return false;
+    }
+    const auto i = static_cast<std::size_t>(r.mode);
+    replays_[i] = std::move(r);
+    return true;
+}
+
+void ArcadeMachine::clearReplays() {
+    for (auto& r : replays_) r.reset();
+}
+
+// The finished match becomes its mode's record game when one of its humans finished typing their name
+// at the top of the mode's table (today's for a today-only table). Two such players in one match: the
+// higher score is the record, and it is the same game either way.
+void ArcadeMachine::maybeKeepReplay() {
+    if (!recorder_.finished()) return;
+    int best = -1;
+    for (int s = 0; s < gameplay::kMaxStations; ++s) {
+        const auto i = static_cast<std::size_t>(s);
+        if (!entries_[i] || !entries_[i]->done() || !entryTop_[i]) continue;
+        if (best < 0 || recorder_.replay().finalScores[i] > recorder_.replay().finalScores[static_cast<std::size_t>(best)]) best = s;
+    }
+    if (best >= 0 && best != replayKeptFor_) {
+        const int s = best;
+        replayKeptFor_ = s;
+        const auto& e = entries_[static_cast<std::size_t>(s)];
+        Replay r = recorder_.replay();
+        r.name = e->name();
+        r.station = s;
+        r.score = r.finalScores[static_cast<std::size_t>(s)];
+        log::info("replays: {} is the new {} record ({}), keeping its replay ({} presses)", r.name, scoreTable(), r.score, r.presses.size());
+        replays_[static_cast<std::size_t>(currentMode_)] = std::move(r);
+        ArcadeEvent ev;
+        ev.type = ArcadeEventType::SaveReplay;
+        ev.mode = currentMode_;
+        events_.push_back(ev);
+    }
 }
 
 ArcadeMachine::MusicCue ArcadeMachine::musicCue() const {
@@ -400,8 +470,12 @@ void ArcadeMachine::tickEntries(const ArcadeInput& input, double dt) {
         if (e->shots() != shotsBefore) haptic(HapticKind::Letter, s);
         if (e->shots() != shotsBefore && !e->done()) sound(audio::SoundId::LetterShot);
         if (e->done()) {
+            // The token goes when the name is filled in: note now whether this row heads the table.
+            const auto rank = highScores_.rankOf(scoreTable(), e->token(), gameplay::modeRules(currentMode_).todayOnly);
+            entryTop_[static_cast<std::size_t>(s)] = rank && *rank == 0;
             highScores_.finish(e->token(), e->name());
             earned(s, progress_.addHighScore());
+            maybeKeepReplay();
             events_.push_back({ArcadeEventType::SaveProgress, audio::SoundId::Coin, s});
             sound(audio::SoundId::InitialsDone);
             events_.push_back({ArcadeEventType::SaveHighScores, audio::SoundId::Coin, s});
@@ -589,6 +663,8 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
                                            match_->tickCount() + 1);
         }
     }
+    if (replayPlayer_) fire = replayPlayer_->presses(match_->tickCount()); // the attract loop shows a record game
+    if (!demo && !match_->paused() && !match_->over()) recorder_.record(match_->tickCount(), fire);
     match_->tick(fire);
     if (!match_->paused() && !demo) matchSeconds_ += gameplay::geom::kTickSeconds;
     if (!demo) updateProgress();
@@ -657,10 +733,17 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
         case AttractPage::Demo:
             tickMatch(input, true);
             if (match_ && match_->over()) demoOverTime_ += dt;
-            if (demoOverTime_ >= kDemoEndHold || pageTime_ >= kDemoMaxTime)
-                enterAttractPage(nextAttractTable() ? AttractPage::HighScores
-                                 : progress_.stats().matches > 0 ? AttractPage::Stats
-                                                                 : AttractPage::Title);
+            if (demoOverTime_ >= kDemoEndHold || pageTime_ >= kDemoMaxTime) {
+                if (nextAttractTable())
+                    enterAttractPage(replays_[static_cast<std::size_t>(attractTable_)] ? AttractPage::Replay : AttractPage::HighScores);
+                else
+                    enterAttractPage(progress_.stats().matches > 0 ? AttractPage::Stats : AttractPage::Title);
+            }
+            break;
+        case AttractPage::Replay:
+            tickMatch(input, true);
+            if (match_ && match_->over()) demoOverTime_ += dt;
+            if (!match_ || demoOverTime_ >= kDemoEndHold || pageTime_ >= kReplayMaxTime) enterAttractPage(AttractPage::HighScores);
             break;
         case AttractPage::HighScores:
             if (pageTime_ >= kHighScoresTime) enterAttractPage(progress_.stats().matches > 0 ? AttractPage::Stats : AttractPage::Title);
