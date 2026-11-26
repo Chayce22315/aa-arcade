@@ -323,10 +323,10 @@ void SelfTest::build() {
         attachStick(3);
     }));
     waitFor("controllers: three controllers registered", [this] {
-        int n = 0;
-        for (const auto& d : app_.inputSystem().devices().devices())
-            if (d->kind != input::DeviceKind::Keyboard) ++n;
-        return n == 3;
+        // The three the test attached (a phone may list more devices of its own).
+        auto& reg = app_.inputSystem().devices();
+        return reg.find(input::DeviceKind::Gamepad, ctl_[1].id) && reg.find(input::DeviceKind::Gamepad, ctl_[2].id) &&
+               reg.find(input::DeviceKind::Joystick, ctl_[3].id);
     });
     add("controllers: device types recognised", [this] {
         auto& reg = app_.inputSystem().devices();

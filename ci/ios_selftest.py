@@ -65,7 +65,7 @@ def main() -> int:
     reports = list(out.rglob("selftest_report.txt"))
     for log in out.rglob("spindle.log"):
         lines = log.read_text(errors="replace").splitlines()
-        print("\n".join(l for l in lines if re.search(r"boot \d+/10|deps:|display:|audio:|selftest: FAIL|error|fatal", l))[:20000])
+        print("\n".join(l for l in lines if re.search(r"boot \d+/10|deps:|display:|audio:|input:|selftest: FAIL|error|fatal", l))[:20000])
     if not reports:
         print("no self-test report; console output:\n" + console[-20000:])
         crashes = sorted(Path.home().glob("Library/Logs/DiagnosticReports/spindle*"))
