@@ -34,6 +34,12 @@ void step(int n, std::string_view what) { log::info("boot {}/10: {}", n, what); 
 } // namespace
 
 void App::fatal(const std::string& message) {
+    // On a phone the system can close the app while it is still starting (the activity is destroyed
+    // and re-created); that is not an error worth a dialog, the next start carries on.
+    if (platform::kMobile && (SDL_HasEvent(SDL_EVENT_TERMINATING) || SDL_HasEvent(SDL_EVENT_QUIT))) {
+        log::info("app: closed by the system while starting ({})", message);
+        return;
+    }
     log::error("fatal: {}", message);
     if (!options_.selftest) {
         const std::string title = std::format("{} cannot start", kTitle);
