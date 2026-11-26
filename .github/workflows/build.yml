@@ -172,7 +172,8 @@ jobs:
         run: |
           # xcodebuild is very chatty: keep the full log as an artifact and show only the problems here.
           if ! cmake --build build/ios --config Release -- -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO > ios-build.log 2>&1; then
-            grep -E -A8 "(error|fatal error):" ios-build.log | head -n 300
+            grep -E -A8 "(error|fatal error):|libtool:|ld: " ios-build.log | head -n 300
+            grep -E -A25 "^Libtool .*libspindle_core" ios-build.log | grep -v -E "^ +(cd|export|/Applications.*clang)" | head -n 60
             grep -E -A20 "The following build commands failed" ios-build.log | head -n 40
             exit 1
           fi

@@ -26,7 +26,10 @@ adb logcat -d >"$OUT/logcat.txt"
 adb exec-out run-as "$PKG" tar cf - -C files . >"$OUT/files.tar" 2>/dev/null || true
 (cd "$OUT" && tar xf files.tar 2>/dev/null; rm -f files.tar) || true
 
-grep -E "selftest: (ok|FAIL|PASS)|boot [0-9]+/10|deps:|display:|audio:|fatal|AndroidRuntime|FATAL" "$OUT/logcat.txt" | tail -n 200
+echo "--- spindle's log (SDL/APP) and SDL's activity messages"
+grep -E "SDL/APP|[ /]SDL *:|SDLActivity" "$OUT/logcat.txt" | grep -v "selftest: ok " | tail -n 250
+echo "--- Android's view of the app"
+grep -E "ActivityTaskManager|ActivityManager|AndroidRuntime|libc *:|DEBUG *:|Fatal|FATAL|$PKG" "$OUT/logcat.txt" | tail -n 120
 if [ -f "$OUT/selftest/selftest_report.txt" ]; then cat "$OUT/selftest/selftest_report.txt"; fi
 echo "self-test result: ${result:-TIMEOUT}"
 [ "$result" = PASS ]

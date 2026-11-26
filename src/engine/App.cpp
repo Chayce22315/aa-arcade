@@ -86,6 +86,7 @@ void App::handleLifecycle(const SDL_Event& e) {
     switch (e.type) {
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
     case SDL_EVENT_DID_ENTER_BACKGROUND:
+        log::info("app: going to the background");
         if (arcade_) arcade_->suspend();
         saveBookkeeping();
         break;
@@ -95,6 +96,7 @@ void App::handleLifecycle(const SDL_Event& e) {
         log::info("app: back in the foreground");
         break;
     case SDL_EVENT_TERMINATING:
+        log::info("app: the system is terminating the app");
         saveBookkeeping();
         break;
     case SDL_EVENT_LOW_MEMORY: log::warn("app: the system is low on memory"); break;
@@ -120,7 +122,8 @@ void App::pumpEvents() {
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_EVENT_QUIT:
-            if (settings_.arcade.exitHoldSeconds == 0 && !options_.selftest)
+            log::info("app: quit requested by the system");
+            if (settings_.arcade.exitHoldSeconds == 0 && !options_.selftest && !platform::kMobile)
                 log::info("app: quit request ignored (cabinet locked: exit_hold_seconds = 0)");
             else
                 requestQuit(0);
@@ -150,10 +153,12 @@ void App::pumpEvents() {
         case SDL_EVENT_KEY_DOWN:
             // Android's back button: leaves a service page, or the app when nobody is playing.
             if (e.key.scancode == SDL_SCANCODE_AC_BACK && !e.key.repeat) {
-                if (service_ && service_->isOpen())
+                if (service_ && service_->isOpen()) {
                     service_->back();
-                else if (arcade_ && arcade_->state() != arcade::ArcadeState::Playing)
+                } else if (arcade_ && arcade_->state() != arcade::ArcadeState::Playing) {
+                    log::info("app: back button, leaving");
                     requestQuit(0);
+                }
                 break;
             }
             input_.handleEvent(e);

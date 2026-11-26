@@ -89,7 +89,6 @@ private:
     std::vector<std::pair<int, std::function<void()>>> releases_;
     std::vector<std::string> shots_;
     std::uint64_t frozenTick_ = 0;
-    double waitStart_ = 0.0;
     bool done_ = false;
 };
 
