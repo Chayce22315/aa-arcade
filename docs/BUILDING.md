@@ -159,6 +159,17 @@ Linux (SDL with its X11, Wayland, ALSA and PulseAudio backends, which it loads a
 tests and the headless self-test, and uploads `spindle-linux-x64.tar.gz` (the executable, README, licence
 and docs; it needs a glibc at least as new as the runner's Ubuntu).
 
+**Releases are automatic.** When every job passes on a push to `main` (for example after merging a pull
+request), the release job publishes the four files (`spindle-windows-x64.zip`, `spindle-linux-x64.tar.gz`,
+`spindle-android.apk`, `spindle-ios-unsigned.ipa`) as the GitHub release `v<version>`, the version being
+`project(spindle VERSION ...)` in `CMakeLists.txt`. The notes come from `data/whats_new.txt`
+(`ci/release_notes.sh`). A new version creates a new release marked latest; another push with the same
+version replaces that release's files and moves its tag to the new commit. To publish a new version,
+raise the version in `CMakeLists.txt` (and `versionCode` / `versionName` in `android/app/build.gradle`)
+and update `data/whats_new.txt`. Because the file names never change,
+`https://github.com/Chayce22315/aa-arcade/releases/latest/download/<file>` always downloads the newest
+release's file. Other branches and pull requests build and test but never release.
+
 The phone jobs: **Android** builds `spindle-android.apk` (release, arm64 + x86_64) with the runner's SDK
 and NDK, then a second job installs the x86_64 debug build on an Android emulator and runs the full
 self-test there; **iOS** builds the app for the simulator on `macos-latest` and runs the self-test in an
