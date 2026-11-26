@@ -133,6 +133,10 @@ void ArcadeMachine::enter(ArcadeState s) {
     state_ = s;
     stateTime_ = 0.0;
     if (s != ArcadeState::Playing) suspended_ = false;
+    // A record game belongs to the attract loop: leaving it (a coin, a start) ends the replay, so the
+    // next match takes its players' presses, not the replay's.
+    replayPlayer_.reset();
+    replayShowing_.reset();
     if (s != ArcadeState::GameOver && s != ArcadeState::Playing && s != ArcadeState::Initials) {
         match_.reset();
         for (auto& b : bots_) b.reset();
@@ -663,7 +667,7 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
                                            match_->tickCount() + 1);
         }
     }
-    if (replayPlayer_) fire = replayPlayer_->presses(match_->tickCount()); // the attract loop shows a record game
+    if (demo && replayPlayer_) fire = replayPlayer_->presses(match_->tickCount()); // the attract loop shows a record game
     if (!demo && !match_->paused() && !match_->over()) recorder_.record(match_->tickCount(), fire);
     match_->tick(fire);
     if (!match_->paused() && !demo) matchSeconds_ += gameplay::geom::kTickSeconds;
