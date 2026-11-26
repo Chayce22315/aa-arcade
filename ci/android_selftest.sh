@@ -28,6 +28,10 @@ adb exec-out run-as "$PKG" tar cf - -C files . >"$OUT/files.tar" 2>/dev/null || 
 
 echo "--- spindle's log (SDL/APP) and SDL's activity messages"
 grep -E "SDL/APP|[ /]SDL *:|SDLActivity" "$OUT/logcat.txt" | grep -v "selftest: ok " | tail -n 250
+echo "--- relaunches and configuration changes (event log)"
+adb logcat -b events -d 2>/dev/null | grep -E -i "relaunch|wm_.*$PKG|am_.*$PKG|configuration_changed" | head -n 60
+echo "--- the system's lines about the app"
+grep -E "$PKG|SpindleActivity" "$OUT/logcat.txt" | grep -v AppsFilter | head -n 80
 echo "--- Android's view of the app"
 grep -E "ActivityTaskManager|ActivityManager|AndroidRuntime|libc *:|DEBUG *:|Fatal|FATAL|$PKG" "$OUT/logcat.txt" | tail -n 120
 if [ -f "$OUT/selftest/selftest_report.txt" ]; then cat "$OUT/selftest/selftest_report.txt"; fi
