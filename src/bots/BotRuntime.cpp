@@ -80,6 +80,30 @@ std::unique_ptr<BotBrain> BotBrain::create(const gameplay::ScriptSource& source,
     brain->profileRef_ = luaL_ref(L, LUA_REGISTRYINDEX); // pops the profile
     lua_pop(L, 1);                                       // profiles
 
+    // Optional cosmetic names: names[difficulty] is a list; the seed picks one.
+    lua_getglobal(L, "names");
+    if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, name.c_str());
+        if (lua_istable(L, -1)) {
+            const auto count = static_cast<std::uint64_t>(lua_rawlen(L, -1));
+            if (count > 0) {
+                lua_rawgeti(L, -1, static_cast<lua_Integer>(1 + seed % count));
+                if (lua_type(L, -1) == LUA_TSTRING) {
+                    std::string picked;
+                    for (const char ch : std::string_view(lua_tostring(L, -1))) {
+                        if (picked.size() >= 10) break;
+                        if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) picked += ch;
+                        else if (ch >= 'A' && ch <= 'Z') picked += static_cast<char>(ch - 'A' + 'a');
+                    }
+                    if (!picked.empty()) brain->name_ = picked;
+                }
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+
     lua_createtable(L, 64, 0);
     brain->attachedRef_ = luaL_ref(L, LUA_REGISTRYINDEX);
     lua_createtable(L, 4, 0);
@@ -155,6 +179,8 @@ bool BotBrain::decide(const BotView& v) {
     setInteger(L, obs, "revision", v.revision);
     lua_pushboolean(L, v.fireEnabled ? 1 : 0);
     lua_setfield(L, obs, "fire_enabled");
+    lua_pushboolean(L, v.blind ? 1 : 0);
+    lua_setfield(L, obs, "blind");
     lua_pushboolean(L, v.onFire ? 1 : 0);
     lua_setfield(L, obs, "on_fire");
     setNumber(L, obs, "fire_left", v.fireLeft);

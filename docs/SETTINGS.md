@@ -20,7 +20,7 @@ and a comment describing the valid values.
 - **Phones and tablets** write the same file into the app's private data folder, with one different
   default: `free_play = 1` (a phone has no coin slot). The display settings are ignored there: the game
   always fills the screen in landscape.
-- `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend`, `heat`, `purge`, `swift` (or `none`); it is stored in
+- `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend`, `heat`, `purge`, `swift`, `gold`, `ghost` (or `none`); it is stored in
   that canonical order. An unknown name makes the whole value invalid (default used).
 
 Check a file without starting the game:
@@ -78,7 +78,8 @@ Volumes are percentages.
 | `master_volume` | `80` | 0..100 | overall volume |
 | `sfx_volume` | `100` | 0..100 | gameplay sounds |
 | `ui_volume` | `80` | 0..100 | coin, join and menu sounds |
-| `attract_sound` | `1` | 0 \| 1 | 1 = play sounds during attract mode |
+| `music_volume` | `60` | 0..100 | the live music (0 = off): a calm loop on attract; in a match the bass, drums and hats come in as the humans' fire meters fill, the lead while one of them is on fire |
+| `attract_sound` | `1` | 0 \| 1 | 1 = play sounds and music during attract mode |
 
 ### [Gameplay]
 
@@ -94,11 +95,12 @@ Round rules shared by every station. Speed values are uncalibrated: tune by feel
 | `start_round` | `1` | 1..50 | round number a match starts at |
 | `seed` | `0` | text | 0 = new random levels each match; any other number repeats the same levels |
 | `powerups` | `1` | 0 \| 1 | 1 = powerup rings appear on the circles from round 3 (never in sudden death) |
-| `powerup_types` | `shield, skip, slim, mend, heat, purge, swift` | text | which rings may appear: shield, skip, slim, mend, heat, purge, swift (comma list, or none); heat needs the fire meter |
+| `powerup_types` | `shield, skip, slim, mend, heat, purge, swift, gold, ghost` | text | which rings may appear: shield, skip, slim, mend, heat, purge, swift, gold, ghost (comma list, or none); heat needs the fire meter |
 | `fire_meter` | `1` | 0 \| 1 | 1 = quick needles fill a combo meter; full = on fire, needles burn through (never in sudden death) |
 | `fire_combo` | `8` | 4..30 | combo points to catch fire; a needle is 1, a close call 2 |
 | `fire_seconds` | `1.5` | 0.5..5.0 | seconds a player stays on fire |
 | `fire_chain_window` | `1.0` | 0.5..5.0 | seconds allowed between needles before the combo drops |
+| `round_end_screen` | `full` | full \| short \| off | full = scores are shot into the circles and the crown moves; short = the same, quicker; off = a plain pause |
 
 ### [Bots]
 
@@ -121,9 +123,51 @@ Coin and cabinet behaviour.
 | `credits_per_coin` | `1` | 1..9 | credits added per coin |
 | `credits_per_game` | `1` | 1..9 | credits each player pays to join |
 | `max_credits` | `99` | 1..99 | coins above this are still counted but add no credits |
-| `join_window` | `10` | 3..30 | seconds other stations have to join after the first start |
+| `vote_seconds` | `30` | 10..60 | seconds of the join and game mode vote screen after the first start (replaces `join_window`, which is now ignored) |
 | `game_over_time` | `8` | 3..30 | seconds the results stay on screen |
 | `exit_hold_seconds` | `2` | 0..10 | hold the exit key this long to quit; 0 = locked cabinet (service menu only) |
+| `initials_seconds` | `15` | 10..30 | seconds a player has to shoot their initials into the high score table |
+
+### [Feedback]
+
+Vibration on phones and rumble on gamepads. Each station feels only its own moments: a needle sticking,
+a close call, a fail, catching fire, a clear, the crown, letters shot into the high score table, the vote
+cursor; every player feels the digits landing on the round end screen. CPUs and the attract demo never
+buzz. Several touch players on one phone share its vibration (one buzz per kind of moment per tick).
+
+| Key | Default | Valid | Meaning |
+|---|---|---|---|
+| `vibration` | `1` | 0 \| 1 | 1 = the phone vibrates for touch players (Android through its vibrator, iPhone through its haptic engine) |
+| `strength` | `70` | 0..100 | how strong vibration and rumble are; phones whose vibrator has no strength control only vary the length |
+| `gamepad_rumble` | `1` | 0 \| 1 | 1 = a gamepad rumbles for its own station's moments (pads without rumble ignore it) |
+
+Both appear in the service menu's volumes page and, on phones, behind the gear on attract; every change
+buzzes once so it can be felt. On a phone without a vibrator spindle can use, "vibration" is greyed out.
+
+### [Accessibility]
+
+Easier to read, easier on the eyes.
+
+| Key | Default | Valid | Meaning |
+|---|---|---|---|
+| `accent_colors` | `0` | 0 \| 1 | 1 = each station gets its own colour (P1 cyan, P2 pink, P3 green, P4 orange) |
+| `reduce_flashes` | `0` | 0 \| 1 | 1 = softer fail flashes and no shaking |
+
+### [Modes]
+
+Game modes players can vote for (1 = on). With every mode off, battle stays on.
+
+| Key | Default | Valid | Meaning |
+|---|---|---|---|
+| `battle` | `1` | 0 \| 1 | last one standing wins |
+| `marathon` | `1` | 0 \| 1 | play till everyone is out - best score wins |
+| `blitz` | `1` | 0 \| 1 | 90 seconds, no knock-outs - best score wins |
+| `race` | `1` | 0 \| 1 | first to clear takes the round - first to 5 |
+| `crown` | `1` | 0 \| 1 | hold the crown at round ends - 8 rounds |
+| `sabotage` | `1` | 0 \| 1 | clears and close calls send junk to rivals |
+| `teams` | `1` | 0 \| 1 | P1 + P2 against P3 + P4, shared tries |
+| `chaos` | `1` | 0 \| 1 | every round rolls a mutator |
+| `daily` | `1` | 0 \| 1 | today's levels, same for everyone |
 
 ### [Keys.Player1]
 
@@ -133,6 +177,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `LCtrl` | text | launch a needle |
 | `start` | `1` | text | join / start |
+| `left` | `W` | text | previous letter / mode |
+| `right` | `D` | text | next letter / mode |
 
 ### [Keys.Player2]
 
@@ -140,6 +186,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `A` | text | launch a needle |
 | `start` | `2` | text | join / start |
+| `left` | `J` | text | previous letter / mode |
+| `right` | `K` | text | next letter / mode |
 
 ### [Keys.Player3]
 
@@ -147,6 +195,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `RCtrl` | text | launch a needle |
 | `start` | `3` | text | join / start |
+| `left` | `Left` | text | previous letter / mode |
+| `right` | `Right` | text | next letter / mode |
 
 ### [Keys.Player4]
 
@@ -154,6 +204,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `L` | text | launch a needle |
 | `start` | `4` | text | join / start |
+| `left` | `F` | text | previous letter / mode |
+| `right` | `H` | text | next letter / mode |
 
 ### [Keys.System]
 

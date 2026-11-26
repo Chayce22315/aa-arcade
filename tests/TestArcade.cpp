@@ -1,9 +1,11 @@
 // Cabinet flow: attract -> coin -> join -> match -> game over -> attract, with bots and humans.
 
+#include <algorithm>
 #include <memory>
 
 #include "Test.hpp"
 #include "arcade/ArcadeMachine.hpp"
+#include "collision/Collision.hpp"
 #include "gameplay/Geometry.hpp"
 #include "gameplay/LevelScript.hpp"
 
@@ -26,7 +28,7 @@ arcade::BotFactory factory() {
 config::Settings testSettings() {
     config::Settings s = config::Settings::defaults();
     s.gameplay.seed = 1234;
-    s.arcade.joinWindow = 5;
+    s.arcade.voteSeconds = 10;
     s.arcade.gameOverTime = 3;
     s.gameplay.roundTimeLimit = 20;
     return s;
@@ -49,6 +51,13 @@ ArcadeInput coin() {
 }
 
 constexpr int kSecond = gameplay::geom::kTickRate;
+
+// Each listed (joined) station votes for the card under its cursor - battle, the first card - and the
+// vote screen runs out: everyone voted, so 5 s, then the mode's card, then the match.
+void voteBattleAndPlay(ArcadeMachine& m, std::initializer_list<int> voters) {
+    for (int s : voters) m.tick(startAt(s));
+    for (int i = 0; i < 20 * kSecond && m.state() == ArcadeState::Vote; ++i) m.tick({});
+}
 
 } // namespace
 
@@ -94,11 +103,12 @@ TEST_CASE(arcade_full_cycle_singleplayer_with_bots) {
     CHECK_EQ(m.credits().credits(), 1);
     CHECK_EQ(m.bookkeeping().coins, std::uint64_t{1});
     m.tick(startAt(2));
-    CHECK(m.state() == ArcadeState::Join);
+    CHECK(m.state() == ArcadeState::Vote);
     CHECK_EQ(m.credits().credits(), 0);
     CHECK(m.joined()[2]);
-    ticks(m, s.arcade.joinWindow * kSecond + 2);
+    voteBattleAndPlay(m, {2});
     REQUIRE(m.state() == ArcadeState::Playing);
+    CHECK(m.currentMode() == gameplay::ModeId::Battle);
     CHECK(m.lineup().mode == players::GameMode::Singleplayer);
     CHECK_EQ(m.lineup().humans, 1);
     CHECK_EQ(m.lineup().bots, 3);
@@ -129,7 +139,7 @@ TEST_CASE(arcade_multiplayer_join_and_early_start) {
     m.tick(startAt(1)); // no credit left
     CHECK(!m.joined()[1]);
     CHECK(m.needCoinFlash(1) > 0.0);
-    m.tick(startAt(0)); // joined player starts early
+    voteBattleAndPlay(m, {0, 3}); // both vote: the clock drops to 5 s
     REQUIRE(m.state() == ArcadeState::Playing);
     CHECK(m.lineup().mode == players::GameMode::Multiplayer);
     CHECK_EQ(m.lineup().humans, 2);
@@ -149,8 +159,8 @@ TEST_CASE(arcade_free_play_and_coin_during_game_over_returns_to_press_start) {
     s.bots.difficulty = config::Difficulty::Expert;
     ArcadeMachine m(s, levels, factory(), {}, 1);
     m.tick(startAt(1));
-    CHECK(m.state() == ArcadeState::Join);
-    ticks(m, s.arcade.joinWindow * kSecond + 2);
+    CHECK(m.state() == ArcadeState::Vote);
+    voteBattleAndPlay(m, {1});
     REQUIRE(m.state() == ArcadeState::Playing);
     for (int i = 0; i < 900 * kSecond && m.state() == ArcadeState::Playing; ++i) m.tick({});
     REQUIRE(m.state() == ArcadeState::GameOver);
@@ -165,7 +175,7 @@ TEST_CASE(arcade_disconnect_pauses_and_start_resumes) {
     s.bots.singleplayerBots = 1;
     ArcadeMachine m(s, levels, factory(), {}, 1);
     m.tick(startAt(0));
-    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
     REQUIRE(m.state() == ArcadeState::Playing);
     ticks(m, 3 * kSecond);
     m.stationDisconnected(0);
@@ -200,4 +210,249 @@ TEST_CASE(arcade_service_menu_freezes_the_cabinet) {
     m.setServiceOpen(false);
     m.tick(coin());
     CHECK_EQ(m.credits().credits(), 1);
+}
+
+// ------------------------------------------------------------------ high scores and initials
+
+namespace {
+
+// Fires when the needle would land well clear of every attached needle (as in TestMatch).
+int aimed(const gameplay::Match& m, int s) {
+    const gameplay::Playfield& f = m.field(s);
+    if (!f.canFireAt(m.tickCount() + 1) || f.inFlight() > 0) return 0;
+    const auto& c = f.config();
+    const double flight = (c.launchDistance - c.needleLength) / c.needleSpeed;
+    const auto& r = m.rotor().state();
+    const double land = collision::wrapAngle(gameplay::geom::kAttachAngle - (r.angle + r.speed * (flight + gameplay::geom::kTickSeconds)));
+    for (double a : f.attachedAngles())
+        if (collision::angularDistance(land, a) < 2.5 * c.minSeparation) return 0;
+    return 1;
+}
+
+int spamFire(const gameplay::Match& m, int s) { return m.field(s).canFireAt(m.tickCount() + 1) ? 1 : 0; }
+
+// One tick with station `s` driven by `policy` while it is in the round.
+void playTick(ArcadeMachine& m, int s, int (*policy)(const gameplay::Match&, int)) {
+    ArcadeInput in;
+    const gameplay::Match* match = m.match();
+    if (m.state() == ArcadeState::Playing && match && match->phase() == gameplay::MatchPhase::Playing && match->stationInRound(s))
+        in.stations[static_cast<std::size_t>(s)].firePresses = policy(*match, s);
+    m.tick(in);
+}
+
+void press(ArcadeMachine& m, int s, arcade::StationButtons b) {
+    ArcadeInput in;
+    in.stations[static_cast<std::size_t>(s)] = b;
+    m.tick(in);
+}
+
+std::vector<arcade::ArcadeEventType> eventTypes(ArcadeMachine& m) {
+    std::vector<arcade::ArcadeEventType> out;
+    for (const auto& e : m.takeEvents()) out.push_back(e.type);
+    return out;
+}
+
+} // namespace
+
+TEST_CASE(arcade_knocked_out_player_shoots_initials_while_the_match_goes_on) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.gameplay.tries = 2;
+    s.gameplay.roundEndScreen = config::RoundEndScreen::Short;
+    s.bots.singleplayerBots = 3;
+    s.bots.difficulty = config::Difficulty::Expert;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 1);
+    m.setToday("2026-11-26");
+    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    // Round 1: aim properly and score.
+    for (int i = 0; i < 60 * kSecond && m.match()->round() == 1; ++i) playTick(m, 0, aimed);
+    REQUIRE(m.match()->participant(0)->score > 0);
+    // Then crash every round until knocked out.
+    for (int i = 0; i < 200 * kSecond && !m.match()->participant(0)->eliminated; ++i) playTick(m, 0, spamFire);
+    REQUIRE(m.match()->participant(0)->eliminated);
+    // The entry starts once that round's end screen is over.
+    for (int i = 0; i < 10 * kSecond && !m.entry(0); ++i) m.tick({});
+    REQUIRE(m.entry(0).has_value());
+    CHECK(m.entering(0));
+    m.takeEvents();
+    // W / D (left / right) and fire: "AB", then back to "end".
+    press(m, 0, {1, false, 0, 0, false, false}); // fire: A
+    press(m, 0, {0, false, 0, 1, false, false}); // right
+    press(m, 0, {1, false, 0, 0, false, false}); // fire: B
+    press(m, 0, {0, false, 2, 0, false, false}); // left twice: wraps to "end"
+    CHECK(m.entry(0)->cursor() == arcade::InitialsEntry::kEnd);
+    press(m, 0, {1, false, 0, 0, false, false});
+    CHECK(!m.entering(0));
+    const auto types = eventTypes(m);
+    CHECK(std::find(types.begin(), types.end(), arcade::ArcadeEventType::SaveHighScores) != types.end());
+    const auto& rows = m.highScores().tables("battle").allTime.rows();
+    REQUIRE(!rows.empty());
+    CHECK_EQ(rows.front().name, std::string("AB"));
+    CHECK_EQ(rows.front().score, m.match() ? m.match()->participant(0)->score : rows.front().score);
+    CHECK_EQ(rows.front().date, std::string("2026-11-26"));
+}
+
+TEST_CASE(arcade_last_player_out_gets_the_initials_screen_before_the_results) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.gameplay.tries = 1;
+    s.gameplay.roundEndScreen = config::RoundEndScreen::Off;
+    s.bots.singleplayerBots = 0; // alone: the match ends when the player is out
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 1);
+    m.tick(startAt(3));
+    voteBattleAndPlay(m, {3});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    for (int i = 0; i < 60 * kSecond && m.match()->round() == 1; ++i) playTick(m, 3, aimed);
+    for (int i = 0; i < 120 * kSecond && m.state() == ArcadeState::Playing; ++i) playTick(m, 3, spamFire);
+    REQUIRE(m.state() == ArcadeState::Initials);
+    REQUIRE(m.entering(3));
+    // Nobody types: the clock runs out and the station tag is saved, then the results follow.
+    for (int i = 0; i < (s.arcade.initialsSeconds + 3) * kSecond && m.state() == ArcadeState::Initials; ++i) m.tick({});
+    CHECK(m.state() == ArcadeState::GameOver);
+    const auto& rows = m.highScores().tables("battle").allTime.rows();
+    REQUIRE(rows.size() == 1);
+    CHECK_EQ(rows[0].name, std::string("P4"));
+    REQUIRE(m.lastResult().has_value());
+    CHECK_EQ(m.lastResult()->scores[3], rows[0].score);
+}
+
+TEST_CASE(arcade_attract_shows_high_scores_once_there_are_any) {
+    gameplay::LevelScript levels;
+    ArcadeMachine m(testSettings(), levels, factory(), {}, 1);
+    arcade::HighScores h;
+    h.finish(h.reserve("battle", 1234, 3, "P1"), "WREN");
+    m.setHighScores(h);
+    const int toDemoEnd = static_cast<int>((ArcadeMachine::kTitleTime + ArcadeMachine::kHowToTime + ArcadeMachine::kDemoMaxTime) * kSecond) + 3;
+    bool sawPage = false;
+    for (int i = 0; i < toDemoEnd + 2 * kSecond; ++i) {
+        m.tick({});
+        if (m.attractPage() == arcade::AttractPage::HighScores) sawPage = true;
+    }
+    CHECK(sawPage);
+}
+
+TEST_CASE(arcade_haptics_go_to_human_stations_only_and_never_the_demo) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.bots.singleplayerBots = 3;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 7);
+    // The attract demo is all bots: nothing buzzes.
+    for (int i = 0; i < 40 * kSecond; ++i) {
+        m.tick({});
+        for (const auto& e : m.takeEvents()) CHECK(e.type != arcade::ArcadeEventType::Haptic);
+    }
+    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    int ticksFelt = 0, others = 0;
+    for (int i = 0; i < 40 * kSecond && m.match() && m.match()->round() == 1; ++i) {
+        playTick(m, 0, aimed);
+        for (const auto& e : m.takeEvents()) {
+            if (e.type != arcade::ArcadeEventType::Haptic) continue;
+            if (e.station != 0) ++others;
+            if (e.haptic == arcade::HapticKind::Tick) ++ticksFelt;
+        }
+    }
+    CHECK(ticksFelt > 0);
+    CHECK_EQ(others, 0); // the three CPUs placed needles too, but never buzz
+}
+
+TEST_CASE(arcade_haptic_patterns_are_short_and_bounded) {
+    using arcade::HapticKind;
+    for (HapticKind k : {HapticKind::Tick, HapticKind::CloseCall, HapticKind::Fail, HapticKind::Fire, HapticKind::Clear, HapticKind::Digit,
+                         HapticKind::Letter, HapticKind::Crown, HapticKind::Select}) {
+        const auto p = arcade::hapticPattern(k);
+        CHECK(p.strength > 0.0f && p.strength <= 1.0f);
+        CHECK(p.milliseconds > 0 && p.milliseconds <= 250);
+        CHECK(p.strength <= arcade::hapticPattern(HapticKind::Fail).strength);
+    }
+    CHECK(arcade::hapticPattern(HapticKind::Crown).doublePulse);
+}
+
+TEST_CASE(arcade_whats_new_shows_once_per_version_after_the_title) {
+    gameplay::LevelScript levels;
+    ArcadeMachine m(testSettings(), levels, factory(), {}, 3);
+    m.setWhatsNew({"gold and ghost rings"}, "9.9.9");
+    CHECK(m.whatsNewPending());
+    ticks(m, static_cast<int>(ArcadeMachine::kTitleTime * kSecond) + 2);
+    CHECK(m.attractPage() == arcade::AttractPage::WhatsNew);
+    CHECK_EQ(m.bookkeeping().seenVersion, std::string("9.9.9"));
+    CHECK(!m.whatsNewPending());
+    bool saved = false;
+    for (const auto& e : m.takeEvents()) saved |= e.type == arcade::ArcadeEventType::SaveBookkeeping;
+    CHECK(saved);
+    ticks(m, static_cast<int>(ArcadeMachine::kWhatsNewTime * kSecond) + 2);
+    CHECK(m.attractPage() == arcade::AttractPage::HowTo);
+    // Seen: the next loop goes straight from the title to how to play.
+    arcade::Bookkeeping bk = arcade::Bookkeeping::parse(config::IniDocument::parse(m.bookkeeping().serialize()));
+    CHECK_EQ(bk.seenVersion, std::string("9.9.9"));
+    bk.clearCounters();
+    CHECK_EQ(bk.seenVersion, std::string("9.9.9")); // clearing the counters does not bring the card back
+    ArcadeMachine again(testSettings(), levels, factory(), bk, 3);
+    again.setWhatsNew({"gold and ghost rings"}, "9.9.9");
+    ticks(again, static_cast<int>(ArcadeMachine::kTitleTime * kSecond) + 2);
+    CHECK(again.attractPage() == arcade::AttractPage::HowTo);
+}
+
+TEST_CASE(arcade_humans_earn_achievements_in_their_column_and_the_demo_never_does) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.bots.singleplayerBots = 3;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 11);
+    for (int i = 0; i < 40 * kSecond; ++i) m.tick({});
+    CHECK_EQ(m.progress().earnedCount(), 0); // four CPUs played the demo
+    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    bool saved = false, toasted = false;
+    for (int i = 0; i < 30 * kSecond && !m.progress().earned(arcade::Achievement::FirstPin); ++i) {
+        playTick(m, 0, aimed);
+        for (const auto& e : m.takeEvents()) saved |= e.type == arcade::ArcadeEventType::SaveProgress;
+    }
+    CHECK(m.progress().earned(arcade::Achievement::FirstPin));
+    CHECK(saved);
+    m.tick({});
+    for (int st = 0; st < 4; ++st) {
+        if (m.toast(st)) {
+            CHECK_EQ(st, 0); // only the human's column shows it
+            toasted = m.toast(st)->achievement == arcade::Achievement::FirstPin;
+        }
+    }
+    CHECK(toasted);
+}
+
+TEST_CASE(arcade_music_is_calm_on_attract_and_builds_in_a_match) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.bots.singleplayerBots = 3;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 5);
+    m.tick({});
+    CHECK(m.musicCue().scene == audio::MusicScene::Attract);
+    m.tick(startAt(0));
+    CHECK(m.musicCue().scene == audio::MusicScene::Match);
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    float lowest = 1.0f, highest = 0.0f;
+    for (int i = 0; i < 40 * kSecond && m.match()->round() == 1; ++i) {
+        playTick(m, 0, aimed);
+        if (m.match()->phase() == gameplay::MatchPhase::Playing) {
+            lowest = std::min(lowest, m.musicCue().intensity);
+            highest = std::max(highest, m.musicCue().intensity);
+        }
+    }
+    CHECK(lowest >= 0.4f);
+    CHECK(highest > lowest); // the human's combo filled the meter a little
+    config::Settings quiet = s;
+    quiet.audio.attractSound = false;
+    m.applySettings(quiet);
+    ArcadeMachine silent(quiet, levels, factory(), {}, 5);
+    silent.tick({});
+    CHECK(silent.musicCue().scene == audio::MusicScene::Off);
 }

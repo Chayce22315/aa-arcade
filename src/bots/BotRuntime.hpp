@@ -32,6 +32,7 @@ struct BotView {
     std::uint32_t revision = 0; // changes whenever the attached set changes (placements and burns)
     // Fire meter, as of the delayed moment.
     bool fireEnabled = false;
+    bool blind = false; // chaos "blind" round: humans only see a needle for a moment, so the bot aims looser
     bool onFire = false;
     double fireLeft = 0.0;      // seconds of fire left
     int combo = 0;
@@ -61,6 +62,8 @@ public:
     void resetMemory();
 
     const BotProfile& profile() const { return profile_; }
+    // A name for the column header, picked from the script's `names` pool by the seed ("cpu" without one).
+    const std::string& name() const { return name_; }
     bool disabled() const { return disabled_; }
     int errorCount() const { return errors_; }
 
@@ -71,6 +74,7 @@ private:
 
     std::unique_ptr<scripting::LuaSandbox> sandbox_;
     BotProfile profile_;
+    std::string name_ = "cpu";
     int decideRef_ = -1;
     int profileRef_ = -1;
     int obsRef_ = -1;

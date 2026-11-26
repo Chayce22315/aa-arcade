@@ -17,6 +17,7 @@
 --   claim_angle                  a needle landing within this angle of a ring takes it
 --   revision                     changes whenever the needles in the circle change (placed or burnt)
 --   fire_enabled                 the fire meter is on this round
+--   blind                        a chaos "blind" round (humans only glimpse needles): aim looser
 --   combo, combo_target          fire-meter combo now / the combo that sets the station on fire
 --   chain_left                   seconds before the combo drops if no needle lands (0 = no chain)
 --   close_call                   a needle landing nearer than this to another counts double (radians)
@@ -57,6 +58,15 @@ profiles = {
   normal = { reaction = 0.22, compensate = 0.85, jitter = 0.026, blunder = 0.025, clearance = 2.1, near_best = 0.88, rhythm = 0.28, patience = 2.2, window = 3.0, greed = 0.6,  blaze = 0.8, mash = 0.15, hurry = 0.35, model_accel = false },
   hard   = { reaction = 0.16, compensate = 1.00, jitter = 0.015, blunder = 0.010, clearance = 1.9, near_best = 0.92, rhythm = 0.20, patience = 1.6, window = 3.0, greed = 0.85, blaze = 1.0, mash = 0.12, hurry = 0.5,  model_accel = true },
   expert = { reaction = 0.12, compensate = 1.00, jitter = 0.008, blunder = 0.003, clearance = 1.8, near_best = 0.95, rhythm = 0.14, patience = 1.2, window = 3.0, greed = 1.0,  blaze = 1.0, mash = 0.10, hurry = 0.6,  model_accel = true },
+}
+
+-- Names shown in a CPU's column header, picked by each bot's seed. Purely cosmetic: lowercase letters
+-- and digits, up to 10 characters.
+names = {
+  easy   = { "pip", "dot", "bean", "mochi", "sprout", "button" },
+  normal = { "spoke", "dial", "orbit", "reel", "bobbin", "tock" },
+  hard   = { "vortex", "comet", "rivet", "flux", "torque", "nova" },
+  expert = { "zenith", "apex", "quasar", "aurora", "titan", "helix" },
 }
 
 local PI = math.pi
@@ -181,9 +191,11 @@ function decide(obs, p, mem)
   -- One timing error per shot, like a human pressing a little early or late. It is drawn before the
   -- bot starts waiting, so the reachability map below records where this press would really land.
   if mem.noise == nil then
-    local n = gauss() * p.jitter
+    -- In a blind round humans only glimpse each needle, so the bot's timing is half as sure again.
+    local jitter = obs.blind and p.jitter * 1.5 or p.jitter
+    local n = gauss() * jitter
     if math.random() < p.blunder then
-      n = n * 4 + ((math.random() < 0.5) and -1 or 1) * p.jitter * 3
+      n = n * 4 + ((math.random() < 0.5) and -1 or 1) * jitter * 3
     end
     mem.noise = n
     mem.greedy = math.random() < p.greed

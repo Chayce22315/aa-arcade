@@ -25,6 +25,7 @@ struct Bookkeeping {
     std::uint64_t botWins = 0;
     std::uint64_t playSeconds = 0;
     std::vector<WinnerRecord> recentWinners; // newest first, at most kMaxRecent
+    std::string seenVersion;                 // the version whose "what's new" card was shown (kept by clearCounters)
 
     static constexpr std::size_t kMaxRecent = 5;
 

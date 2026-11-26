@@ -30,21 +30,31 @@ count as game input, so players cannot open it by accident). The menu then shows
 
 The same gesture works on any touch screen, including a touch monitor on a Windows cabinet.
 
+## Player options (phones)
+
+On a phone or tablet a gear sits in the top-right corner of the attract and insert-coin screens. Tapping
+it opens a single **options** page for players: volume, game sounds, menu sounds, reduce flashes and
+player colours. Leaving it (done, back, or the back button) saves. It never shows the operator pages.
+
 ## Pages
 
 | Page | What it does |
 |---|---|
-| input test | Live state of every station's fire and start, every system key, every connected device (type, name, assigned station, buttons and axes) and the last input event. Hold back for 1 s or press service to leave. |
+| input test | Live state of every station's fire, start, left and right, every system key, every connected device (type, name, assigned station, buttons and axes) and the last input event. Hold back for 1 s or press service to leave. |
 | controller assignment | Assignment mode (`auto` / `fixed`), what a disconnect does (`pause` / `continue`), the controller on each station (select, then press any button on the controller to assign it; left clears the station), and "remember these for fixed mode" to store the current controllers' GUIDs. |
-| keybinds | Select an action, then press the new key. Also "keyboard per station" and, per station, the keyboard it listens to (select, then press any key on that keyboard; left resets it to any keyboard). |
+| keybinds | Select an action (fire, start, left, right per station, then the cabinet keys), then press the new key. Also "keyboard per station" and, per station, the keyboard it listens to (select, then press any key on that keyboard; left resets it to any keyboard). |
 | display test | Square grid, diagonals, the four station circles with moving needles, resolution, renderer, vsync and frame time. |
-| video | Resolution (auto or any mode the monitor reports), fullscreen mode, vsync, monitor, frame cap; "apply now" previews it. |
+| video | Resolution (auto or any mode the monitor reports), fullscreen mode, vsync, reduce flashes, player colours, monitor, frame cap; "apply now" previews it. |
 | sound test | Plays each sound (including the powerup, shield, ignite and burn sounds); shows the audio device or "unavailable (silent)". |
 | volumes | Master, game sounds, coin and menu sounds (heard while changing), attract sound. |
-| game settings | Tries, round time limit, rotation speed, needle speed, ready delay, start round, level seed, powerups on/off and each ring type (shield, skip, slim, mend, heat, purge, swift) on/off, the fire meter on/off, the combo to catch fire, seconds on fire and the combo chain window. |
-| coin settings | Free play, credits per coin, credits per player, max credits, join window, game over time, exit hold (0 = locked cabinet). |
+| game settings | Tries, round time limit, rotation speed, needle speed, ready delay, start round, level seed, powerups on/off and each ring type (shield, skip, slim, mend, heat, purge, swift, gold, ghost) on/off, the fire meter on/off, the combo to catch fire, seconds on fire, the combo chain window, and the round end screen (full / short / off). |
+| coin settings | Free play, credits per coin, credits per player, max credits, vote time, game over time, initials time, exit hold (0 = locked cabinet). |
 | bot settings | Bots with one player, bots with two or more players, bot difficulty, demo difficulty. |
-| bookkeeping | Coins, service credits, singleplayer and multiplayer games, wins by players and by bots, play time; "clear bookkeeping" (press twice). |
+| game modes | Vote time and each of the nine game modes on/off (with every mode off, battle stays on). |
+| bookkeeping | Coins, service credits, singleplayer and multiplayer games, wins by players and by bots, play time, the last five winners; "clear bookkeeping" (press twice). |
+| daily code check | Type a daily score code (position and character) and see the date and score it carries, or "not a valid code". A typo check, not proof. |
+| progress | Lifetime stats, every achievement (earned, or how to earn it), the unlockable looks (on / off once unlocked, saved at once) and "reset progress" (press twice). Saved in progress.ini. |
+| high scores | Every mode's tables (all time and today) with name, score, round and date; "clear high scores" (press twice), which also clears the record replays. Saved in highscores.ini. |
 | reset defaults | Loads all defaults into the menu (press twice); Save & Exit keeps them. |
 | save & exit | Applies every change at once (input, audio, display, credits, bots) and writes settings.ini, keeping its comments. |
 | exit without saving | Discards every change, including previewed video and volume changes. |

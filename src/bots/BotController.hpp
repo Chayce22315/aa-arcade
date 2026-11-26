@@ -16,7 +16,8 @@ class BotController {
 public:
     explicit BotController(std::unique_ptr<BotBrain> brain);
 
-    void beginRound();
+    // blind: the round hides needles from humans (chaos), so the bot's timing gets looser to stay fair.
+    void beginRound(bool blind = false);
     // Call once per Playing tick, before the match tick. Returns the number of fire presses (0 or 1).
     int think(const gameplay::RotorState& rotor, const gameplay::Playfield& field, double roundTime, double timeLeft,
               std::uint64_t tick);
@@ -25,6 +26,7 @@ public:
     int delayTicks() const { return delayTicks_; }
 
 private:
+    bool blind_ = false;
     struct Snapshot {
         double angle = 0.0;
         double speed = 0.0;

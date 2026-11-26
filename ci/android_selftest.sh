@@ -12,7 +12,7 @@ adb logcat -c
 adb shell am start -W -n "$PKG/.SpindleActivity" --es args "--selftest"
 
 result=""
-for i in $(seq 1 240); do # up to 20 minutes
+for i in $(seq 1 480); do # up to 40 minutes (the self-test runs in real time; emulators are slow)
     sleep 5
     log=$(adb logcat -d 2>/dev/null)
     if grep -q "selftest: PASS" <<<"$log"; then result=PASS; break; fi

@@ -5,10 +5,18 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "arcade/Bookkeeping.hpp"
 #include "arcade/Credits.hpp"
+#include "arcade/Haptics.hpp"
+#include "arcade/HighScores.hpp"
+#include "audio/MusicSynth.hpp"
+#include "arcade/Progress.hpp"
+#include "arcade/Replay.hpp"
+#include "arcade/InitialsEntry.hpp"
+#include "arcade/VoteBox.hpp"
 #include "audio/SoundId.hpp"
 #include "bots/BotController.hpp"
 #include "config/Settings.hpp"
@@ -18,12 +26,20 @@
 
 namespace spindle::arcade {
 
-enum class ArcadeState { Attract, InsertCoin, Join, Playing, GameOver };
-enum class AttractPage { Title, HowTo, Demo, Winners };
+// Vote: players join and vote for a game mode. Initials: after the last round end screen, players who
+// made a high score table shoot their initials.
+enum class ArcadeState { Attract, InsertCoin, Vote, Playing, Initials, GameOver };
+// Inside Vote: voting (joining still open), the tie-break wheel, then the chosen mode's card.
+enum class VotePhase { Voting, Spin, Intro };
+enum class AttractPage { Title, WhatsNew, HowTo, Demo, Replay, HighScores, Stats };
 
 struct StationButtons {
     int firePresses = 0;
     bool startPressed = false;
+    int leftPresses = 0;
+    int rightPresses = 0;
+    bool leftHeld = false; // held at the end of the tick (for hold-to-repeat)
+    bool rightHeld = false;
 };
 
 // One simulation tick worth of cabinet input (edges, not levels).
@@ -33,21 +49,28 @@ struct ArcadeInput {
     int serviceCredits = 0;
 };
 
-enum class ArcadeEventType { Sound, SaveBookkeeping, MatchStarted, MatchEnded, JoinRefused };
+enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused, Haptic, SaveProgress, SaveReplay };
 
 struct ArcadeEvent {
     ArcadeEventType type = ArcadeEventType::Sound;
     audio::SoundId sound = audio::SoundId::Coin;
-    int station = -1;
+    int station = -1; // Haptic: the human station that feels it, -1 = every human
+    HapticKind haptic = HapticKind::Tick;
+    gameplay::ModeId mode = gameplay::ModeId::Battle; // SaveReplay: whose record changed
 };
 
 struct MatchResult {
+    std::string date; // the local date the match started (daily codes)
     players::GameMode mode = players::GameMode::Singleplayer;
     players::Lineup lineup;
     int winner = -1;
     std::vector<int> standings;
     int finalRound = 0;
     std::array<int, gameplay::kMaxStations> roundsCleared{};
+    std::array<std::int64_t, gameplay::kMaxStations> scores{};
+    gameplay::ModeId gameMode = gameplay::ModeId::Battle;
+    std::array<int, gameplay::kMaxStations> points{}; // race wins / crown points
+    std::optional<int> winningTeam;                   // teams
 };
 
 using BotFactory = std::function<std::unique_ptr<bots::BotController>(config::Difficulty, std::uint64_t seed)>;
@@ -73,6 +96,11 @@ public:
 
     ArcadeState state() const { return state_; }
     AttractPage attractPage() const { return attractPage_; }
+    // The "what's new" card: shown once, on the first attract loop after `version` changed.
+    void setWhatsNew(std::vector<std::string> lines, std::string version);
+    const std::vector<std::string>& whatsNew() const { return whatsNew_; }
+    const std::string& whatsNewVersion() const { return whatsNewVersion_; }
+    bool whatsNewPending() const { return !whatsNew_.empty() && bookkeeping_.seenVersion != whatsNewVersion_; }
     double stateTime() const { return stateTime_; }
     double pageTime() const { return pageTime_; }
 
@@ -85,7 +113,16 @@ public:
     const gameplay::Match* match() const { return match_.get(); }
     const players::Lineup& lineup() const { return lineup_; }
     const std::array<bool, gameplay::kMaxStations>& joined() const { return joined_; }
-    double joinTimeLeft() const;
+    // The vote screen.
+    double voteTimeLeft() const;
+    const VoteBox& vote() const { return vote_; }
+    VotePhase votePhase() const { return votePhase_; }
+    double votePhaseTime() const { return votePhaseTime_; }
+    const std::vector<int>& wheel() const { return wheel_; } // card indices on the tie-break wheel
+    int wheelResult() const { return wheelResult_; }          // the slice it stops on
+    gameplay::ModeId chosenMode() const { return chosenMode_; }
+    gameplay::ModeId currentMode() const { return currentMode_; } // the match (or demo) being played
+    std::vector<gameplay::ModeId> enabledModes() const;
     double gameOverTimeLeft() const;
     double needCoinFlash(int station) const { return needCoin_[static_cast<std::size_t>(station)]; }
     bool stationWaitingForReconnect(int station) const;
@@ -93,28 +130,87 @@ public:
     const std::optional<MatchResult>& lastResult() const { return lastResult_; }
     const bots::BotController* bot(int station) const { return bots_[static_cast<std::size_t>(station)].get(); }
 
+    // High scores. The platform loads the tables at boot and tells the machine today's local date.
+    // What the live music should do now: calm on attract, building with the humans' fire meters in a
+    // match, full while one of them is on fire.
+    struct MusicCue {
+        audio::MusicScene scene = audio::MusicScene::Off;
+        float intensity = 0.0f;
+    };
+    MusicCue musicCue() const;
+
+    // Replays (docs/RULES.md "Replays"): the build id written into new ones, and each mode's record game.
+    void setReplayBuild(std::string build) { replayBuild_ = std::move(build); }
+    const std::string& replayBuild() const { return replayBuild_; }
+    // Takes a saved replay; refused (false) when another build recorded it.
+    bool setReplay(Replay r);
+    const std::optional<Replay>& replay(gameplay::ModeId mode) const { return replays_[static_cast<std::size_t>(mode)]; }
+    void clearReplays();
+    // The record being shown on the attract loop (Replay page), if any.
+    const Replay* showingReplay() const { return replayShowing_ ? &*replays_[static_cast<std::size_t>(*replayShowing_)] : nullptr; }
+    static constexpr double kReplayMaxTime = 75.0;
+
+    void setProgress(Progress p) { progress_ = std::move(p); }
+    const Progress& progress() const { return progress_; }
+    Progress& progress() { return progress_; }
+    // The achievement a station just earned, shown in its column for a few seconds.
+    struct Toast {
+        Achievement achievement = Achievement::FirstPin;
+        double timeLeft = 0.0;
+    };
+    const std::optional<Toast>& toast(int station) const { return toasts_[static_cast<std::size_t>(station)]; }
+    static constexpr double kToastSeconds = 3.5;
+    static constexpr double kStatsTime = 9.0;
+
+    void setHighScores(HighScores h) { highScores_ = std::move(h); }
+    const HighScores& highScores() const { return highScores_; }
+    HighScores& highScores() { return highScores_; }
+    void setToday(std::string_view isoDate) { highScores_.setToday(isoDate); }
+    // A player shooting their initials (knocked out mid-match, or after the last round), if any.
+    const std::optional<InitialsEntry>& entry(int station) const { return entries_[static_cast<std::size_t>(station)]; }
+    bool entering(int station) const;
+    // Table the current match's scores go into (one per game mode), and the one the attract page shows.
+    std::string_view scoreTable() const { return gameplay::modeKey(currentMode_); }
+    std::string_view attractTable() const { return gameplay::modeKey(gameplay::kAllModes[static_cast<std::size_t>(attractTable_)]); }
+    // Every table highscores.ini may hold (the mode keys, in gameplay::kAllModes order).
+    static constexpr std::array<std::string_view, gameplay::kModeCount> kScoreTables{"battle", "marathon", "blitz", "race",  "crown",
+                                                                                     "sabotage", "teams", "chaos", "daily"};
+
     std::vector<ArcadeEvent> takeEvents();
 
     // Durations (seconds), exposed for screens and tests.
     static constexpr double kTitleTime = 7.0;
     static constexpr double kHowToTime = 8.0;
+    static constexpr double kWhatsNewTime = 9.0;
     static constexpr double kDemoMaxTime = 50.0;
     static constexpr double kDemoEndHold = 3.0;
-    static constexpr double kWinnersTime = 6.0;
+    static constexpr double kHighScoresTime = 9.0;
     static constexpr double kInsertCoinIdle = 30.0;
+    static constexpr double kInitialsHold = 1.2; // the saved names stay up this long before the results
 
 private:
     void enter(ArcadeState s);
     void enterAttractPage(AttractPage p);
+    std::vector<std::string> whatsNew_;
+    std::string whatsNewVersion_;
     void startDemo();
-    void startMatch();
+    void startMatch(gameplay::ModeId mode);
+    void enterVote();
+    void tickVote(const ArcadeInput& input, double dt);
+    void finishVote();
+    void startIntro();
+    bool nextAttractTable();
     void endMatch();
     void tickMatch(const ArcadeInput& input, bool demo);
     void handleCoins(const ArcadeInput& input);
     void tryJoin(int station);
+    void startEntry(int station);
+    void tickEntries(const ArcadeInput& input, double dt);
+    void tallySounds(bool demo);
     void updatePause();
     void sound(audio::SoundId id, bool demo = false);
-    gameplay::MatchConfig matchConfig(bool demo);
+    void haptic(HapticKind kind, int station, bool demo = false); // humans only, never in the demo
+    gameplay::MatchConfig matchConfig(bool demo, gameplay::ModeId mode);
 
     config::Settings settings_;
     gameplay::LevelProvider& levels_;
@@ -137,6 +233,40 @@ private:
     std::unique_ptr<gameplay::Match> match_;
     std::array<std::unique_ptr<bots::BotController>, gameplay::kMaxStations> bots_{};
     std::optional<MatchResult> lastResult_;
+    HighScores highScores_;
+    Progress progress_;
+    ReplayRecorder recorder_;
+    std::string replayBuild_ = "unknown";
+    std::array<std::optional<Replay>, gameplay::kModeCount> replays_{};
+    std::optional<gameplay::ModeId> replayShowing_;
+    std::optional<ReplayPlayer> replayPlayer_;
+    std::array<bool, gameplay::kMaxStations> entryTop_{}; // finished their initials at the top of the table
+    int replayKeptFor_ = -1;
+    std::string matchDate_;                              // the station whose name the kept replay carries
+    void maybeKeepReplay();
+    std::array<std::optional<Toast>, gameplay::kMaxStations> toasts_{};
+    std::array<std::vector<Achievement>, gameplay::kMaxStations> toastQueue_{};
+    StationProgress stationProgress(int station) const;
+    void earned(int station, const std::vector<Achievement>& list);
+    void updateProgress();
+    void tickToasts(double dt);
+    std::array<std::optional<InitialsEntry>, gameplay::kMaxStations> entries_{};
+    std::array<bool, gameplay::kMaxStations> entryPending_{}; // knocked out: entry starts when the round end screen is over
+    std::array<bool, gameplay::kMaxStations> entryChecked_{}; // this match's score was already offered to the tables
+    double entriesDoneTime_ = 0.0;
+    VoteBox vote_;
+    VotePhase votePhase_ = VotePhase::Voting;
+    double votePhaseTime_ = 0.0;
+    std::vector<int> wheel_;
+    int wheelResult_ = 0;
+    int wheelSlice_ = 0;
+    std::array<HoldRepeat, gameplay::kMaxStations> voteLeft_{}, voteRight_{};
+    gameplay::ModeId chosenMode_ = gameplay::ModeId::Battle;
+    gameplay::ModeId currentMode_ = gameplay::ModeId::Battle;
+    int attractTable_ = 0;
+    int tallyTicks_ = 0; // round end screen sounds already played this tally
+    bool tallyDone_ = false;
+    bool tallyCrown_ = false;
     bool serviceOpen_ = false;
     bool suspended_ = false;
     std::vector<ArcadeEvent> events_;

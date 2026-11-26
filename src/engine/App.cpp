@@ -1,7 +1,10 @@
 #include "engine/App.hpp"
 
 #include <algorithm>
+#include <array>
 #include <format>
+
+#include <SDL3/SDL_time.h>
 
 #include "assets/ControllerDbPin.hpp"
 #include "config/AtomicFile.hpp"
@@ -18,6 +21,13 @@ namespace {
 constexpr std::uint64_t kTickNs = std::uint64_t{1'000'000'000} / static_cast<std::uint64_t>(gameplay::geom::kTickRate);
 constexpr int kMaxCatchUpTicks = 60; // 250 ms; beyond that the simulation drops time instead of spiralling
 } // namespace
+
+std::string localIsoDate() {
+    SDL_Time now = 0;
+    SDL_DateTime dt{};
+    if (!SDL_GetCurrentTime(&now) || !SDL_TimeToDateTime(now, &dt, true)) return {};
+    return std::format("{:04}-{:02}-{:02}", dt.year, dt.month, dt.day);
+}
 
 App::App(AppOptions options) : options_(std::move(options)) {}
 
@@ -73,11 +83,24 @@ input::TouchContext App::touchContext() const {
     }
     for (std::size_t i = 0; i < 4; ++i) c.columnEdges[i] = layout_.columns[i].x / layout_.width;
     c.columnEdges[4] = (layout_.columns[3].x + layout_.columns[3].w) / layout_.width;
-    if (arcade_->state() == arcade::ArcadeState::Playing) {
+    if (arcade_->state() == arcade::ArcadeState::Playing || arcade_->state() == arcade::ArcadeState::Initials) {
         c.screen = input::TouchScreen::Playing;
-        for (std::size_t i = 0; i < 4; ++i) c.humans[i] = arcade_->lineup().seats[i] == players::SeatKind::Human;
+        const gameplay::Match* m = arcade_->match();
+        for (std::size_t i = 0; i < 4; ++i) {
+            const int s = static_cast<int>(i);
+            c.entering[i] = arcade_->entering(s);
+            const bool human = arcade_->lineup().seats[i] == players::SeatKind::Human;
+            const bool stillIn = m && m->participant(s) && !m->participant(s)->eliminated && !m->over();
+            c.humans[i] = human && stillIn && arcade_->state() == arcade::ArcadeState::Playing;
+        }
+        c.pause = touchUi() && arcade_->state() == arcade::ArcadeState::Playing && !arcade_->suspended() &&
+                  std::count(c.humans.begin(), c.humans.end(), true) == 1;
     } else {
         c.screen = input::TouchScreen::Lobby;
+        c.gear = touchUi() && (arcade_->state() == arcade::ArcadeState::Attract || arcade_->state() == arcade::ArcadeState::InsertCoin);
+        // On the vote screen a joined column picks and votes (with one mode on, a tap simply starts).
+        if (arcade_->state() == arcade::ArcadeState::Vote && arcade_->votePhase() == arcade::VotePhase::Voting && arcade_->vote().modes().size() > 1)
+            for (std::size_t i = 0; i < 4; ++i) c.voting[i] = arcade_->vote().joined(static_cast<int>(i));
     }
     return c;
 }
@@ -211,6 +234,7 @@ void App::tick(std::uint64_t tickEndNs) {
     ++ticks_;
     clockSeconds_ += dt;
     input::TickInput in = input_.drain(tickEndNs);
+    if (ticks_ % static_cast<std::uint64_t>(gameplay::geom::kTickRate) == 1) arcade_->setToday(localIsoDate()); // today's tables roll over at midnight
     for (int s : in.stationsLost) arcade_->stationDisconnected(s);
     for (int s : in.stationsRestored) arcade_->stationReconnected(s);
 
@@ -220,11 +244,21 @@ void App::tick(std::uint64_t tickEndNs) {
         if (in.systemPressed[static_cast<std::size_t>(input::Action::Service)]) {
             service_->open(in.serviceByTouch);
             audio_.play(audio::SoundId::MenuSelect);
+        } else if (in.systemPressed[static_cast<std::size_t>(input::Action::Options)]) {
+            service_->openPlayerOptions();
+            audio_.play(audio::SoundId::MenuSelect);
         } else {
+            if (in.systemPressed[static_cast<std::size_t>(input::Action::Pause)]) arcade_->suspend();
             arcade_->tick(in.arcade);
         }
     }
     handleArcadeEvents();
+    if (progressDirty_) saveProgress();
+    {
+        const auto cue = arcade_->musicCue();
+        audio_.setMusic(cue.scene, cue.intensity);
+    }
+    haptics_.update(SDL_GetTicksNS());
     updateScreenSaver();
 
     exitHeld_ = input_.systemHeld(input::Action::Exit) ? exitHeld_ + dt : 0.0;
@@ -235,11 +269,26 @@ void App::tick(std::uint64_t tickEndNs) {
     if (selftest_) selftest_->afterTick();
 }
 
+bool App::stationUsesPhone(int station) const { return touchUi() && !input_.devices().stationHasController(station); }
+
 void App::handleArcadeEvents() {
+    // Several touch players share one phone: it buzzes once per kind of moment per tick.
+    std::array<bool, 16> phoneBuzzed{};
+    const std::uint64_t now = SDL_GetTicksNS();
     for (const arcade::ArcadeEvent& e : arcade_->takeEvents()) {
         switch (e.type) {
+        case arcade::ArcadeEventType::Haptic: {
+            const auto k = static_cast<std::size_t>(e.haptic);
+            bool phone = e.station >= 0 && stationUsesPhone(e.station) && k < phoneBuzzed.size() && !phoneBuzzed[k];
+            if (phone) phoneBuzzed[k] = true;
+            haptics_.play(e.haptic, e.station, phone, now);
+            break;
+        }
         case arcade::ArcadeEventType::Sound: audio_.play(e.sound); break;
         case arcade::ArcadeEventType::SaveBookkeeping: saveBookkeeping(); break;
+        case arcade::ArcadeEventType::SaveHighScores: saveHighScores(); break;
+        case arcade::ArcadeEventType::SaveProgress: progressDirty_ = true; break; // once per tick, however many
+        case arcade::ArcadeEventType::SaveReplay: saveReplay(e.mode); break;
         case arcade::ArcadeEventType::JoinRefused: audio_.play(audio::SoundId::MenuMove); break;
         default: break;
         }
@@ -303,6 +352,7 @@ void App::commitSettings(const config::Settings& s) {
         log::info("settings: saved {}", pathToUtf8(paths_.settings()));
     settingsIssues_ = static_cast<std::size_t>(input_.configure(settings_));
     audio_.setVolumes(settings_.audio);
+    haptics_.configure(settings_.feedback);
     arcade_->applySettings(settings_);
     log::setLevel(static_cast<log::Level>(static_cast<int>(settings_.system.logLevel)));
     if (displayChanged) previewDisplay(settings_.display);
@@ -317,6 +367,43 @@ void App::previewDisplay(const config::Settings::Display& d) {
 }
 
 void App::previewVolumes(const config::Settings::Audio& a) { audio_.setVolumes(a); }
+
+void App::previewFeedback(const config::Settings::Feedback& f) {
+    haptics_.configure(f);
+    const std::uint64_t now = SDL_GetTicksNS();
+    for (int s = 0; s < gameplay::kMaxStations; ++s)
+        if (input_.devices().stationHasController(s)) haptics_.play(arcade::HapticKind::Clear, s, false, now);
+    if (touchUi()) haptics_.play(arcade::HapticKind::Clear, -1, true, now);
+    haptics_.configure(settings_.feedback); // only a preview: the saved settings stay in force
+}
+
+void App::saveProgress() {
+    progressDirty_ = false;
+    std::string err;
+    if (!config::writeFileAtomic(paths_.progress(), arcade_->progress().serialize(), &err)) log::error("progress: save failed: {}", err);
+}
+
+void App::saveReplay(gameplay::ModeId mode) {
+    const auto path = paths_.replay(gameplay::modeKey(mode));
+    std::error_code ec;
+    if (const auto& r = arcade_->replay(mode)) {
+        std::filesystem::create_directories(path.parent_path(), ec);
+        std::string err;
+        if (!config::writeFileAtomic(path, r->serialize(), &err)) log::error("replays: save failed: {}", err);
+    } else {
+        std::filesystem::remove(path, ec);
+    }
+}
+
+void App::saveReplays() {
+    for (gameplay::ModeId m : gameplay::kAllModes) saveReplay(m);
+}
+
+void App::saveHighScores() {
+    if (!arcade_) return;
+    std::string err;
+    if (!config::writeFileAtomic(paths_.highscores(), arcade_->highScores().serialize(), &err)) log::error("high scores: save failed: {}", err);
+}
 
 void App::saveBookkeeping() {
     if (!arcade_) return;

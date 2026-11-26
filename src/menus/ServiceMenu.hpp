@@ -25,6 +25,8 @@ public:
     virtual void commitSettings(const config::Settings& settings) = 0; // apply everywhere and save settings.ini
     virtual void previewDisplay(const config::Settings::Display& display) = 0;
     virtual void previewVolumes(const config::Settings::Audio& audio) = 0;
+    virtual void previewFeedback(const config::Settings::Feedback& feedback) = 0; // one buzz as the setting would feel
+    virtual bool phoneVibrates() const = 0;                                        // this device has a vibrator spindle can use
     virtual void playSound(audio::SoundId id) = 0;
     virtual input::InputSystem& inputSystem() = 0;
     virtual arcade::ArcadeMachine& arcadeMachine() = 0;
@@ -34,6 +36,9 @@ public:
     virtual std::size_t settingsIssueCount() const = 0;
     virtual std::string controllerDbSummary() const = 0;
     virtual void saveBookkeeping() = 0;
+    virtual void saveHighScores() = 0;
+    virtual void saveProgress() = 0;
+    virtual void saveReplays() = 0; // writes each mode's record game, removes the files of cleared ones
     virtual void requestShutdown() = 0;
     virtual double frameMilliseconds() const = 0;
 };
@@ -45,6 +50,9 @@ public:
 
     // byTouch: opened from the hidden corner, so show the touch controls even on a cabinet.
     void open(bool byTouch = false);
+    // Phones: the player options behind the gear on attract (volumes and accessibility only).
+    void openPlayerOptions();
+    bool playerOptions() const { return playerMode_; }
     bool isOpen() const { return open_; }
     void update(const input::TickInput& in, double dt);
     // Same as the back key: leaves a sub page; on the main page moves to "save & exit".
@@ -62,10 +70,14 @@ public:
     std::optional<render::Vec2> rowPoint(int index) const;
 
 private:
-    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Bookkeeping };
+    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores, PlayerOptions, Progress, DailyCode };
     enum class Capture { None, Key, Controller, Keyboard };
 
     void show(PageId id);
+    void addFeedbackItems(std::vector<MenuItem>& items);
+    void addLookItems(std::vector<MenuItem>& items, bool unlockedOnly);
+    std::string codeDraft_ = std::string(12, '0'); // the daily code being checked
+    int codePos_ = 0;
     void build(PageId id);
     void close(bool save);
     bool confirm(const std::string& key);
@@ -104,6 +116,8 @@ private:
     std::string captureLabel_;
     double captureTime_ = 0.0;
     std::string pendingConfirm_;
+    bool rebuildPending_ = false;
+    bool playerMode_ = false; // opened from the phone gear: one page, leaving saves // rebuild the page on the next update (never from inside one of its items)
     double confirmTime_ = 0.0;
     double backHeld_ = 0.0;
     std::string notice_;

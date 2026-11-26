@@ -16,6 +16,7 @@ enum class Difficulty { Easy, Normal, Hard, Expert };
 enum class AssignmentMode { Auto, Fixed };
 enum class DisconnectAction { Pause, Continue };
 enum class LogLevelSetting { Error, Warn, Info, Debug };
+enum class RoundEndScreen { Full, Short, Off };
 
 struct Resolution {
     bool automatic = true;
@@ -29,6 +30,8 @@ inline constexpr int kStationCount = 4;
 struct StationKeys {
     std::string fire;
     std::string start;
+    std::string left;  // initials letter / vote cursor
+    std::string right;
     bool operator==(const StationKeys&) const = default;
 };
 
@@ -46,6 +49,7 @@ struct Settings {
         int masterVolume = 80;
         int sfxVolume = 100;
         int uiVolume = 80;
+        int musicVolume = 60;
         bool attractSound = true;
         bool operator==(const Audio&) const = default;
     } audio;
@@ -59,11 +63,12 @@ struct Settings {
         int startRound = 1;
         std::uint32_t seed = 0;
         bool powerups = true;
-        std::string powerupTypes = "shield, skip, slim, mend, heat, purge, swift";
+        std::string powerupTypes = "shield, skip, slim, mend, heat, purge, swift, gold, ghost";
         bool fireMeter = true;
         int fireCombo = 8;
         double fireSeconds = 1.5;
         double fireChainWindow = 1.0;
+        RoundEndScreen roundEndScreen = RoundEndScreen::Full;
         bool operator==(const Gameplay&) const = default;
     } gameplay;
 
@@ -80,13 +85,20 @@ struct Settings {
         int creditsPerCoin = 1;
         int creditsPerGame = 1;
         int maxCredits = 99;
-        int joinWindow = 10;
+        int voteSeconds = 30; // the join + game mode vote screen
         int gameOverTime = 8;
         int exitHoldSeconds = 2;
+        int initialsSeconds = 15;
         bool operator==(const Arcade&) const = default;
     } arcade;
 
-    std::array<StationKeys, kStationCount> stationKeys{{{"LCtrl", "1"}, {"A", "2"}, {"RCtrl", "3"}, {"L", "4"}}};
+    // Game modes players can vote for, in the order of gameplay::kAllModes (battle ... daily).
+    struct Modes {
+        std::array<bool, 9> enabled{true, true, true, true, true, true, true, true, true};
+        bool operator==(const Modes&) const = default;
+    } modes;
+
+    std::array<StationKeys, kStationCount> stationKeys{{{"LCtrl", "1", "W", "D"}, {"A", "2", "J", "K"}, {"RCtrl", "3", "Left", "Right"}, {"L", "4", "F", "H"}}};
 
     struct SystemKeys {
         std::string coin = "5";
@@ -120,6 +132,19 @@ struct Settings {
         int downloadTimeout = 10;
         bool operator==(const Assets&) const = default;
     } assets;
+
+    struct Feedback {
+        bool vibration = true;     // phones: buzz on needles, fails, fire, the crown...
+        int strength = 70;         // 0..100, for phones and gamepads
+        bool gamepadRumble = true; // gamepads rumble for their own station
+        bool operator==(const Feedback&) const = default;
+    } feedback;
+
+    struct Accessibility {
+        bool accentColors = false; // each station gets its own colour
+        bool reduceFlashes = false; // softer fail flashes, no shaking
+        bool operator==(const Accessibility&) const = default;
+    } accessibility;
 
     struct System {
         LogLevelSetting logLevel = LogLevelSetting::Info;

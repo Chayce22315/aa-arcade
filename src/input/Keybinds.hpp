@@ -9,6 +9,8 @@ namespace spindle::input {
 enum class Action {
     Fire,
     Start,
+    Left,  // station: pick a letter / move a cursor
+    Right,
     Coin,
     ServiceCoin,
     Service,
@@ -19,6 +21,8 @@ enum class Action {
     MenuRight,
     MenuSelect,
     MenuBack,
+    Options, // phones: the gear on attract opens the player options
+    Pause,   // phones: the pause button during a solo match
     Count
 };
 

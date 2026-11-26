@@ -82,6 +82,46 @@ jobs:
           python3 tools/gen_sfx.py --check
           python3 tools/gen_art.py --check
 
+  linux-game:
+    name: Linux x64 (game + self-test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Development packages SDL builds its Linux backends against
+        # SDL loads X11, Wayland, ALSA and PulseAudio at run time; the headers only switch them on.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev wayland-protocols \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libdrm-dev libgbm-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev
+      - name: Configure
+        run: cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/linux --parallel
+      - name: Unit tests
+        run: build/linux/spindle_tests
+      - name: Four-station self-test (headless)
+        run: python3 tools/run_selftest.py build/linux/spindle --out selftest-run
+      - name: Package
+        run: |
+          mkdir -p dist/spindle
+          cp build/linux/spindle README.md LICENSE dist/spindle/
+          cp -r docs dist/spindle/docs
+          tar -C dist -czf spindle-linux-x64.tar.gz spindle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spindle-linux-x64
+          path: spindle-linux-x64.tar.gz
+      - name: Upload self-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-linux
+          path: selftest-run
+          if-no-files-found: ignore
+
   android:
     name: Android (APK)
     runs-on: ubuntu-latest
@@ -104,8 +144,25 @@ jobs:
           echo "NDK $NDK, CMake $CMAKE"
           echo "SPINDLE_NDK=$NDK" >> "$GITHUB_ENV"
           echo "SPINDLE_CMAKE=$CMAKE" >> "$GITHUB_ENV"
+      - name: Release signing key (optional repository secrets)
+        # Set SPINDLE_KEYSTORE_B64 (base64 of the keystore file), SPINDLE_KEYSTORE_PASSWORD,
+        # SPINDLE_KEY_ALIAS and SPINDLE_KEY_PASSWORD to sign the release APK with your own key.
+        env:
+          KEYSTORE_B64: ${{ secrets.SPINDLE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/spindle-release.keystore"
+            echo "SPINDLE_KEYSTORE=$RUNNER_TEMP/spindle-release.keystore" >> "$GITHUB_ENV"
+            echo "release APK: signed with the repository's release key"
+          else
+            echo "release APK: no SPINDLE_KEYSTORE_B64 secret, signed with the debug key"
+          fi
       - name: Build the release APK (arm64 + x86_64)
         working-directory: android
+        env:
+          SPINDLE_KEYSTORE_PASSWORD: ${{ secrets.SPINDLE_KEYSTORE_PASSWORD }}
+          SPINDLE_KEY_ALIAS: ${{ secrets.SPINDLE_KEY_ALIAS }}
+          SPINDLE_KEY_PASSWORD: ${{ secrets.SPINDLE_KEY_PASSWORD }}
         run: ./gradlew --no-daemon assembleRelease -Pspindle.ndkVersion="$SPINDLE_NDK" -Pspindle.cmakeVersion="$SPINDLE_CMAKE"
       - name: Build the debug APK for the emulator (x86_64)
         working-directory: android
@@ -129,7 +186,7 @@ jobs:
     name: Android self-test (emulator)
     needs: android
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -160,7 +217,7 @@ jobs:
   ios:
     name: iOS (device .ipa, simulator build + self-test)
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Configure (Xcode, iOS simulator)
@@ -200,7 +257,7 @@ jobs:
           name: spindle-ios-unsigned-ipa
           path: spindle-ios-unsigned.ipa
       - name: Run the four-station self-test in the iOS simulator
-        timeout-minutes: 25
+        timeout-minutes: 45
         run: python3 ci/ios_selftest.py build/ios/Release-iphonesimulator/spindle.app selftest-ios
       - name: Package the simulator app
         if: always()
@@ -228,3 +285,60 @@ jobs:
           name: selftest-ios
           path: selftest-ios
           if-no-files-found: ignore
+
+  release:
+    # Every green push to main publishes its files as the release of the version in CMakeLists.txt
+    # (project VERSION). A new version makes a new release; another push with the same version replaces
+    # that release's files and moves its tag to the new commit. The file names never change, so
+    # https://github.com/<owner>/<repo>/releases/latest/download/<file> always serves the newest build.
+    name: Release (main only)
+    needs: [windows-msvc, linux-core, linux-game, android, android-selftest, ios]
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: spindle-windows-x64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: spindle-linux-x64
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: spindle-android
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: spindle-ios-unsigned-ipa
+          path: dist
+      - name: Release notes
+        run: bash ci/release_notes.sh > release-notes.md && cat release-notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/^project(spindle VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
+          [ -n "$VERSION" ] || { echo "no project VERSION in CMakeLists.txt"; exit 1; }
+          TAG="v$VERSION"
+          FILES=(dist/spindle-windows-x64.zip dist/spindle-linux-x64.tar.gz dist/spindle-android.apk dist/spindle-ios-unsigned.ipa)
+          ls -la "${FILES[@]}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "updating $TAG with the build of ${GITHUB_SHA}"
+            git tag -f "$TAG" "$GITHUB_SHA"
+            git push -f origin "refs/tags/$TAG"
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+            gh release edit "$TAG" --title "spindle $VERSION" --notes-file release-notes.md --latest
+          else
+            echo "creating $TAG from ${GITHUB_SHA}"
+            gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" --title "spindle $VERSION" --notes-file release-notes.md --latest
+          fi
+          echo "### Released [spindle $VERSION](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/$TAG)" >> "$GITHUB_STEP_SUMMARY"

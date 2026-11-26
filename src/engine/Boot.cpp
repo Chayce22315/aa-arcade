@@ -6,12 +6,19 @@
 //  5 detect the display resolution            10 enter attract mode
 
 #include <format>
+#include <filesystem>
+#include <optional>
 #include <random>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "assets/ControllerDbPin.hpp"
 #include "assets/EmbeddedAssets.hpp"
 #include "assets/PngInfo.hpp"
+#include "assets/Sha256.hpp"
 #include "config/AtomicFile.hpp"
+#include "config/IniDocument.hpp"
 #include "engine/App.hpp"
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
@@ -141,14 +148,20 @@ bool App::bootLoad() {
     } else {
         log::info("assets: using SDL's built-in controller mappings");
     }
-    if (auto text = config::readFile(paths_.levelScriptOverride()))
-        levelOverride_ = gameplay::ScriptSource{*text, pathToUtf8(paths_.levelScriptOverride())};
+    for (const auto& path : {paths_.levelScriptOverride(), paths_.levelScriptUser()})
+        if (auto text = config::readFile(path)) {
+            levelOverride_ = gameplay::ScriptSource{*text, pathToUtf8(path)};
+            break;
+        }
     levels_ = std::make_unique<gameplay::LevelScript>(levelOverride_);
     if (!levels_->embeddedHealthy()) log::error("levels: built-in script broken; emergency rounds in use");
 
     botSource_ = bots::BotBrain::embeddedSource();
-    if (auto text = config::readFile(paths_.botScriptOverride())) {
-        gameplay::ScriptSource candidate{*text, pathToUtf8(paths_.botScriptOverride())};
+    std::optional<std::filesystem::path> botPath;
+    for (const auto& path : {paths_.botScriptOverride(), paths_.botScriptUser()})
+        if (std::error_code ec; !botPath && std::filesystem::exists(path, ec)) botPath = path;
+    if (auto text = botPath ? config::readFile(*botPath) : std::nullopt) {
+        gameplay::ScriptSource candidate{*text, pathToUtf8(*botPath)};
         std::string err;
         if (bots::BotBrain::create(candidate, config::Difficulty::Normal, 1, &err)) {
             botSource_ = std::move(candidate);
@@ -212,6 +225,8 @@ bool App::bootArcade() {
     std::string err;
     if (!audio_.open(&err)) log::warn("audio: {}; running silent", err);
     audio_.setVolumes(settings_.audio);
+    haptics_.configure(settings_.feedback);
+    haptics_.open(input_.devices());
 
     arcade::Bookkeeping bk;
     if (auto text = config::readFile(paths_.bookkeeping())) bk = arcade::Bookkeeping::parse(config::IniDocument::parse(*text));
@@ -219,6 +234,47 @@ bool App::bootArcade() {
     const std::uint64_t entropy = (static_cast<std::uint64_t>(rd()) << 32) ^ rd() ^ SDL_GetTicksNS();
     arcade_ = std::make_unique<arcade::ArcadeMachine>(
         settings_, *levels_, [this](config::Difficulty d, std::uint64_t seed) { return makeBot(d, seed); }, std::move(bk), entropy);
+    if (auto text = config::readFile(paths_.highscores())) {
+        arcade_->setHighScores(arcade::HighScores::parse(config::IniDocument::parse(*text), arcade::ArcadeMachine::kScoreTables));
+        log::info("high scores: loaded");
+    }
+    arcade_->setToday(localIsoDate());
+    {
+        // Replays only play back on the build (and level script) that recorded them.
+        const auto levelsText = levelOverride_ ? std::optional<std::string_view>(levelOverride_->code) : assets::embeddedText("scripts/levels.lua");
+        const std::string levelsHash = assets::sha256Hex(levelsText.value_or(std::string_view{})).substr(0, 10);
+        arcade_->setReplayBuild(std::format("{}+{}+{}", kVersion, kGitCommit, levelsHash));
+        int loaded = 0;
+        for (gameplay::ModeId m : gameplay::kAllModes) {
+            const auto path = paths_.replay(gameplay::modeKey(m));
+            auto text = config::readFile(path);
+            if (!text) continue;
+            std::string why;
+            if (auto r = arcade::Replay::parse(*text, &why)) {
+                if (r->mode == m && arcade_->setReplay(std::move(*r))) ++loaded;
+            } else {
+                log::warn("replays: {} is damaged ({}); ignored", pathToUtf8(path), why);
+            }
+        }
+        log::info("replays: {} record game(s) to show", loaded);
+    }
+    if (auto text = config::readFile(paths_.progress())) {
+        arcade_->setProgress(arcade::Progress::parse(config::IniDocument::parse(*text)));
+        log::info("progress: {} matches, {} of {} achievements", arcade_->progress().stats().matches, arcade_->progress().earnedCount(),
+                  arcade::kAchievementCount);
+    }
+    if (auto text = assets::embeddedText("whats_new.txt")) {
+        std::vector<std::string> lines;
+        std::size_t pos = 0;
+        while (pos < text->size() && lines.size() < 10) {
+            std::size_t end = text->find('\n', pos);
+            if (end == std::string_view::npos) end = text->size();
+            const std::string_view line = config::trim(text->substr(pos, end - pos));
+            if (!line.empty() && line.front() != '#') lines.emplace_back(line);
+            pos = end + 1;
+        }
+        arcade_->setWhatsNew(std::move(lines), std::string(kVersion));
+    }
     service_ = std::make_unique<menus::ServiceMenu>(*this);
 
     input_.setTouchContext([this] { return touchContext(); });

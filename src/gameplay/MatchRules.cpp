@@ -18,6 +18,11 @@ std::string_view ruleCaseName(RuleCase c) {
     case RuleCase::T9: return "T9";
     case RuleCase::T10: return "T10";
     case RuleCase::T11: return "T11";
+    case RuleCase::Score: return "score";
+    case RuleCase::Race: return "race";
+    case RuleCase::Crown: return "crown";
+    case RuleCase::Clock: return "clock";
+    case RuleCase::Team: return "team";
     }
     return "-";
 }

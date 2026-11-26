@@ -165,6 +165,78 @@ def round_start() -> list[float]:
     return tone(lambda t: 880, 0.12, ((1, 1.0), (2, 0.12)), attack=0.004, release=0.05, decay=0.09)
 
 
+def tally_tick(step: int) -> list[float]:
+    # one digit landing in the circle: a short blip that climbs a little with every digit
+    f = 660.0 * (2 ** (step * 3 / 12))
+    return tone(lambda t: f, 0.07, ((1, 1.0), (2, 0.2)), attack=0.002, release=0.03, decay=0.03)
+
+
+def tally_done() -> list[float]:
+    # the number is in: a soft two-note "ding-dong" chord
+    a = tone(lambda t: 784.0, 0.32, ((1, 0.6), (2, 0.15)), attack=0.003, release=0.12, decay=0.18)
+    b = tone(lambda t: 1046.5, 0.32, ((1, 0.5), (2, 0.1)), attack=0.003, release=0.12, decay=0.18)
+    return mix(a, [0.0] * int(0.04 * RATE) + b)
+
+
+def crown() -> list[float]:
+    # the crown lands: a quick rising fanfare with a shimmer on top
+    notes = [659.25, 830.61, 987.77]
+    parts = [tone(lambda t, f=f: f, 0.08, ((1, 1.0), (2, 0.3), (3, 0.12)), attack=0.003, release=0.02) for f in notes]
+    last = tone(lambda t: 1318.5, 0.5, ((1, 1.0), (2, 0.25), (4, 0.08)), attack=0.003, release=0.2, decay=0.35)
+    shimmer = tone(lambda t: 2637.0 + 40 * math.sin(t * 60), 0.5, ((1, 0.25),), attack=0.05, release=0.25, decay=0.3)
+    head = concat(*parts, gap=0.01)
+    return concat(head, mix(last, shimmer))
+
+
+def letter_shot() -> list[float]:
+    # a letter fired into the circle: a falling "pew" then a little thunk
+    pew = tone(lambda t: 1400 - 900 * min(1.0, t / 0.06), 0.07, ((1, 0.8), (2, 0.15)), attack=0.001, release=0.02)
+    thunk = tone(lambda t: 220, 0.05, ((1, 0.8), (3, 0.2)), attack=0.001, release=0.02, decay=0.02)
+    return concat(pew, thunk)
+
+
+def initials_done() -> list[float]:
+    # name saved: a bright little arpeggio
+    notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]
+    parts = [tone(lambda t, f=f: f, 0.07, ((1, 1.0), (2, 0.2)), attack=0.002, release=0.02) for f in notes[:-1]]
+    last = tone(lambda t: notes[-1], 0.3, ((1, 1.0), (2, 0.2)), attack=0.002, release=0.12, decay=0.2)
+    return concat(*parts, last, gap=0.008)
+
+
+def vote_tick() -> list[float]:
+    # the cursor hops to the next card: a tiny wooden tick
+    return tone(lambda t: 1250.0, 0.03, ((1, 0.7), (3, 0.2)), attack=0.001, release=0.015, decay=0.012)
+
+
+def vote_cast() -> list[float]:
+    # a vote goes in: a firm two-step "ka-chunk"
+    a = tone(lambda t: 520.0, 0.06, ((1, 0.8), (2, 0.25)), attack=0.001, release=0.02, decay=0.04)
+    b = tone(lambda t: 780.0, 0.1, ((1, 0.8), (2, 0.2)), attack=0.001, release=0.04, decay=0.06)
+    return concat(a, b, gap=0.01)
+
+
+def wheel_tick() -> list[float]:
+    # a slice passes the needle: a dry click
+    rnd = Noise(73)
+    click = [rnd.next() * env(i / RATE, 0.012, attack=0.0003, release=0.006, decay=0.003) for i in range(int(0.012 * RATE))]
+    body = tone(lambda t: 1800.0, 0.012, ((1, 0.4),), attack=0.0005, release=0.006, decay=0.004)
+    return mix(click, body)
+
+
+def wheel_stop() -> list[float]:
+    # the needle sticks in the winning slice: thunk plus a bright ring
+    thunk = tone(lambda t: 140 - 60 * min(1.0, t / 0.08), 0.12, ((1, 1.0), (2, 0.3)), attack=0.001, release=0.05, decay=0.05)
+    ring = tone(lambda t: 1568.0, 0.45, ((1, 0.5), (2, 0.15)), attack=0.002, release=0.2, decay=0.25)
+    return mix(thunk, ring)
+
+
+def mode_intro() -> list[float]:
+    # the chosen mode's card: a rising swell into a chord
+    swell = tone(lambda t: 330 + 330 * min(1.0, t / 0.35), 0.35, ((1, 0.5), (2, 0.2)), attack=0.08, release=0.05)
+    chord = mix(*[tone(lambda t, f=f: f, 0.5, ((1, 0.35), (2, 0.1)), attack=0.004, release=0.25, decay=0.35) for f in (659.25, 830.61, 987.77)])
+    return concat(swell, chord)
+
+
 RECIPES = {
     "needle_hit": needle_hit,
     "fail": fail,
@@ -179,6 +251,19 @@ RECIPES = {
     "shield": shield,
     "ignite": ignite,
     "burn": burn,
+    "tally_tick_1": lambda: tally_tick(0),
+    "tally_tick_2": lambda: tally_tick(1),
+    "tally_tick_3": lambda: tally_tick(2),
+    "tally_tick_4": lambda: tally_tick(3),
+    "tally_done": tally_done,
+    "crown": crown,
+    "letter_shot": letter_shot,
+    "initials_done": initials_done,
+    "vote_tick": vote_tick,
+    "vote_cast": vote_cast,
+    "wheel_tick": wheel_tick,
+    "wheel_stop": wheel_stop,
+    "mode_intro": mode_intro,
 }
 
 

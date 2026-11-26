@@ -71,6 +71,7 @@ MatchConfig config(int tries) {
     c.roundTimeLimit = 20.0;
     c.readyDelay = 0.5;
     c.resolveDelay = 0.5;
+    c.tally = scoring::TallyStyle::Off;
     c.seed = 7;
     return c;
 }
@@ -198,4 +199,95 @@ TEST_CASE(match_pause_freezes_everything) {
     m.setPaused(false);
     runTicks(m, {oracle, oracle, nullptr, nullptr}, 10);
     CHECK(m.tickCount() > ticks);
+}
+
+// ------------------------------------------------------------------ score and crown
+
+namespace {
+
+void runUntilTally(Match& m, const std::array<Policy, 4>& policy, int maxTicks = 120 * geom::kTickRate) {
+    for (int i = 0; i < maxTicks && !m.over() && m.phase() != MatchPhase::Tally; ++i) runTicks(m, policy, 1);
+}
+
+// Places needles like the oracle until `count` are in, then waits for the round clock.
+Policy upTo(int count) {
+    return [count](const Match& m, int s) { return m.field(s).placed() + m.field(s).inFlight() < count ? oracle(m, s) : 0; };
+}
+
+std::vector<MatchEvent> eventsOf(std::vector<MatchEvent> all, MatchEventType t) {
+    std::erase_if(all, [t](const MatchEvent& e) { return e.type != t; });
+    return all;
+}
+
+} // namespace
+
+TEST_CASE(match_score_adds_round_points_and_bonus_at_the_round_end) {
+    FixedLevels levels;
+    Match m(config(3), {{0, ParticipantKind::Human}, {2, ParticipantKind::Bot}}, levels);
+    runUntilTally(m, {oracle, nullptr, oracle, nullptr});
+    REQUIRE(m.phase() == MatchPhase::Tally);
+    for (int s : {0, 2}) {
+        const Participant& p = *m.participant(s);
+        CHECK(m.tallied(s));
+        CHECK(p.roundPoints >= 5 * scoring::kNeedle); // five needles at round 1
+        CHECK(p.roundBonus >= scoring::kClear);       // both cleared
+        CHECK_EQ(p.scoreBefore, std::int64_t{0});
+        CHECK_EQ(p.score, p.roundPoints + p.roundBonus);
+    }
+    CHECK(!m.tallied(1));
+    const auto scored = eventsOf(m.takeEvents(), MatchEventType::RoundScored);
+    CHECK_EQ(scored.size(), std::size_t{2});
+    // Round 2 starts from the banked totals with fresh round points.
+    const std::int64_t before = m.participant(0)->score;
+    runUntilRound(m, {oracle, nullptr, oracle, nullptr}, 2);
+    CHECK_EQ(m.participant(0)->score, before);
+    CHECK_EQ(m.participant(0)->roundPoints, std::int64_t{0});
+}
+
+TEST_CASE(match_crown_goes_to_most_round_points_and_ties_change_nothing) {
+    FixedLevels levels;
+    Match m(config(3), {{0, ParticipantKind::Human}, {1, ParticipantKind::Bot}}, levels);
+    runUntilTally(m, {oracle, upTo(2), nullptr, nullptr});
+    REQUIRE(m.phase() == MatchPhase::Tally);
+    CHECK(m.participant(0)->roundPoints > m.participant(1)->roundPoints);
+    CHECK_EQ(m.crownHolder(), 0);
+    CHECK_EQ(m.participant(0)->crownsWon, 1);
+    const auto taken = eventsOf(m.takeEvents(), MatchEventType::CrownTaken);
+    REQUIRE(taken.size() == 1);
+    CHECK_EQ(taken[0].station, 0);
+    CHECK_EQ(taken[0].value, -1);
+
+    // Identical play on the shared rotor ties the round points: nobody new takes the crown.
+    FixedLevels levels2;
+    Match tie(config(3), {{0, ParticipantKind::Human}, {3, ParticipantKind::Human}}, levels2);
+    runUntilTally(tie, {oracle, nullptr, nullptr, oracle});
+    REQUIRE(tie.phase() == MatchPhase::Tally);
+    CHECK_EQ(tie.participant(0)->roundPoints, tie.participant(3)->roundPoints);
+    CHECK_EQ(tie.crownHolder(), -1);
+}
+
+TEST_CASE(match_crown_holder_knocked_out_loses_it) {
+    FixedLevels levels;
+    Match m(config(2), {{0, ParticipantKind::Human}, {1, ParticipantKind::Bot}, {2, ParticipantKind::Bot}}, levels);
+    // Round 1: station 0 clears with five needles; 1 and 2 place three each and time out.
+    runUntilTally(m, {oracle, upTo(3), upTo(3), nullptr}, 60 * geom::kTickRate);
+    REQUIRE(m.phase() == MatchPhase::Tally);
+    CHECK_EQ(m.crownHolder(), 0);
+    // Round 2: the holder crashes (one try left); 1 and 2 tie, so the crown stays with station 0.
+    runUntilRound(m, {oracle, oracle, oracle, nullptr}, 2);
+    m.takeEvents();
+    runUntilTally(m, {spam, oracle, oracle, nullptr});
+    REQUIRE(m.phase() == MatchPhase::Tally);
+    CHECK(!m.participant(0)->eliminated);
+    CHECK_EQ(m.crownHolder(), 0);
+    // Round 3: the holder crashes out for good and loses the crown; the tie behind it gives it to nobody.
+    runUntilRound(m, {oracle, oracle, oracle, nullptr}, 3);
+    m.takeEvents();
+    runUntilTally(m, {spam, oracle, oracle, nullptr});
+    REQUIRE(m.phase() == MatchPhase::Tally);
+    CHECK(m.participant(0)->eliminated);
+    CHECK_EQ(m.crownHolder(), -1);
+    const auto lost = eventsOf(m.takeEvents(), MatchEventType::CrownLost);
+    REQUIRE(lost.size() == 1);
+    CHECK_EQ(lost[0].station, 0);
 }

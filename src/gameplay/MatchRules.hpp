@@ -29,7 +29,9 @@ enum class DecisionKind {
     SuddenDeath // the listed players play a sudden-death round, one try each
 };
 
-enum class RuleCase { None, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11 };
+// T1-T11: battle's tie-break table. The other modes decide by Score (best total), Race (first to the
+// target), Crown (most crown points), Clock (blitz time up, best total) and Team (last team in).
+enum class RuleCase { None, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, Score, Race, Crown, Clock, Team };
 std::string_view ruleCaseName(RuleCase c);
 
 struct RoundDecision {

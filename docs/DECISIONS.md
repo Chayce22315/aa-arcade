@@ -148,3 +148,82 @@ leave a running app with nothing on screen after an operator shut-down or a fini
 emulator and the iOS app in a simulator, on every push. Real devices (touch feel, notches, audio
 latency, performance) still have to be checked by hand.
 
+
+**Scores are hidden until the round end.** The round end screen is the reveal: ammo balls type each
+total into its circle. Showing a running score during play would spoil that and add another number to
+columns that already carry a queue, a fire meter and a clock.
+
+**The round end screen's timeline lives in the core.** `scoring::tallyTiming` decides when each digit
+lands, when the lines appear and when the crown moves; the screen draws from it, the arcade machine
+times the sounds from it and the tests check it. The match simply stays in its `Tally` phase that long.
+
+**A reserved high score row is never pushed out.** A player who qualifies gets a row under their station
+tag at once and then shoots their initials. If someone else qualifies meanwhile, an unreserved row gives
+way, even one slightly above the reserved row, so nobody types a name into a row that then vanishes.
+Today's tables use the platform's local date, passed in by the app; the core never reads a clock.
+
+**Station keys never auto-repeat; the letter wheel repeats on the tick.** Operating-system key repeat
+would also repeat fire, so `HoldRepeat` (0.35 s, then every 0.09 s) repeats left / right in the core.
+
+**Every game mode keeps the shared circle.** The nine modes change only how rounds are scored and how a
+match ends; every station still plays the same round on the same rotor at the same moment. That is why
+race is "first to clear takes the round" rather than players racing through rounds at their own pace
+(which would need one rotor per station), and why sabotage junk and chaos mutators are pure functions
+of the round that re-check the level: a station's copy of the round can gain junk needles, never a
+different rotation. The mode rules (`gameplay/Modes`) and the vote (`arcade/VoteBox`) are core code
+with their own tests; the wheel's spin is drawn from the same function the tests check.
+
+**The vote replaces the join window.** The first start opens one screen where players join and vote;
+the clock rules (5 s once everyone voted, a late joiner pushes it back to 5 s) keep it short without
+locking anyone out. Votes, ties and the wheel are deterministic for a seed, so they are tested like
+the rules.
+
+**Screen feedback never touches the shared circle.** A fail shakes only the failing column (that player
+is done for the round), the clear burst, close-call pop and try pip are drawn from match state the core
+already keeps (`tryLostTick`, `closeCallTick`), and the iris between screens is purely drawn. Small text
+has a minimum size and is bumped up on phones; overlay text sits on a scrim. "Reduce flashes" softens
+the fail flash and turns the shakes and sparks off; "player colours" tints each station.
+
+**Haptics are moments from the core, feel from the platform.** The arcade machine emits a `Haptic`
+event (what happened, to which station) for human stations only, never in the demo; `arcade/Haptics`
+says how long and how strong each moment is on a plain rumble motor. The app routes it: a station with
+a gamepad rumbles that pad (`SDL_RumbleGamepad`), a touch player buzzes the phone. Android's vibrator
+is SDL's haptic device for `VIBRATOR_SERVICE`, which needs `android.permission.VIBRATE` (a normal
+permission, never prompted). SDL has no iPhone haptics, so `engine/ios/HapticsIos.mm` uses UIKit's
+impact, notification and selection feedback generators, which feel better than a plain buzz anyway.
+Pads are looked up again for each pulse, so a pad unplugged in the middle of a double tap is skipped.
+
+**CPUs have names from the bot script.** Each difficulty in `bot.lua` lists a `names` pool; the bot's
+seed picks one, so the same seed always gives the same name. Names are sanitised to lowercase letters
+and digits (10 at most), and a script without names falls back to `cpu`.
+
+**Achievements belong to the cabinet.** There are no accounts and initials are not identities, so the
+stats and achievements are the machine's, kept apart from the operator's bookkeeping in `progress.ini`.
+They are checked every tick from the match's own participant numbers, so a pop-up appears the moment a
+threshold is crossed. The plan's third look was an inverted theme; it became comet trails instead,
+because inverting means re-colouring every screen while the three looks now each touch one drawing
+(the flames, the crown, needles in flight). A hand-edited `progress.ini` cannot switch on a look whose
+achievement is not earned.
+
+**"What's new" is shown once per version.** The card's lines are embedded (`data/whats_new.txt`) and the
+version that was shown is kept in `bookkeeping.ini`, where clearing the counters leaves it alone.
+
+**The music is synthesized live.** A step sequencer with five layers (pad, bass, kick and snare, hats,
+lead) renders in the audio callback, so it costs no WAV loops in the executable and reacts the moment a
+player catches fire. The arcade machine only says where the music should head (`musicCue`: a scene and
+an intensity from the humans' fire meters); the synth fades its layers towards that. It is pure code,
+so the tests render it to check it never clips and stays finite. The sound itself is a starting point
+to be tuned by ear.
+
+**Replays record every press, CPUs included.** Re-running the CPUs would make a replay depend on the bot
+script and its random numbers staying the same; recording their presses means the match itself (already
+deterministic for its seed, config and presses, which the tests check) is all a replay needs. Doubles in
+the replay file are written as their bits so nothing is lost to rounding. The build id (version, commit,
+level script hash) keeps a replay from playing on a build whose rules might differ; replays are not
+re-simulated at boot, which would cost seconds on a phone. A record row loses its reservation token when
+the name is typed, so the machine notes at that moment whether the row heads the table. On the attract
+loop a replay is cut at 75 s so a long record game does not hold the loop.
+
+**The daily code is a typo check.** Twelve base32 characters hold 60 bits: 16 for the day since
+2024-01-01, 24 for the score (the score cap fits) and 20 from SHA-256 of the date and score. Without a
+secret it cannot prove anything, and spindle is open source, so the docs say so plainly.

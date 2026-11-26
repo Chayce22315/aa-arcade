@@ -179,6 +179,7 @@ MatchConfig ringConfig(int tries) {
     c.tries = tries;
     c.readyDelay = 0.5;
     c.resolveDelay = 0.5;
+    c.tally = scoring::TallyStyle::Off;
     c.roundTimeLimit = 20.0;
     c.seed = 3;
     c.powerups.assign(kAllPowerups.begin(), kAllPowerups.end());
@@ -304,4 +305,66 @@ TEST_CASE(powerups_level_validation_rejects_bad_rings) {
     LevelDef many = d;
     many.pickups = {{1.0, PowerupKind::Shield}, {2.0, PowerupKind::Shield}, {3.0, PowerupKind::Shield}, {4.0, PowerupKind::Shield}};
     CHECK(validateLevel(many, limits).has_value());
+}
+
+TEST_CASE(powerups_gold_doubles_the_needles_after_it_for_a_few_seconds) {
+    const LevelDef level = withRing(constantLevel(3, 1.0), PowerupKind::Gold, 10);
+    Rotor rotor(level.rotation);
+    Playfield f;
+    f.begin(level, makeFieldConfig(1.0));
+    run(f, rotor, {10, 250}, 400); // the second needle lands about a second after the first
+    REQUIRE(f.status() == FieldStatus::Playing);
+    const auto placements = f.takePlacements();
+    REQUIRE(placements.size() == std::size_t{2});
+    CHECK(!placements[0].gold); // the needle that takes the ring is scored before it takes it
+    CHECK(placements[1].gold);
+    const std::uint64_t until = f.goldUntilTick();
+    CHECK(f.gold(until - 1) && !f.gold(until));
+    scoring::Placement plain;
+    scoring::Placement golden;
+    golden.gold = true;
+    CHECK_EQ(scoring::placementPoints(golden, 3), 2 * scoring::placementPoints(plain, 3));
+    golden.onFire = true;
+    plain.onFire = true;
+    CHECK_EQ(scoring::placementPoints(golden, 3), 2 * scoring::placementPoints(plain, 3)); // stacks with fire
+}
+
+TEST_CASE(powerups_ghost_needle_sticks_through_a_touch_then_is_ordinary) {
+    const double speed = 1.0;
+    const LevelDef level = withRing(constantLevel(3, speed), PowerupKind::Ghost, 10);
+    const auto rev = static_cast<std::uint64_t>(std::llround(2.0 * geom::kPi / (speed * geom::kTickSeconds)));
+    const FieldConfig cfg = makeFieldConfig(1.0);
+    {
+        // Shot 2 comes round to the very spot of shot 1: as a ghost it sticks there anyway.
+        Rotor rotor(level.rotation);
+        Playfield f;
+        f.begin(level, cfg);
+        run(f, rotor, {10, 10 + rev}, static_cast<int>(10 + rev + 240));
+        CHECK(f.status() == FieldStatus::Playing);
+        CHECK_EQ(f.placed(), 2);
+        CHECK(!f.ghostArmed());
+        REQUIRE(f.attached().size() == std::size_t{2});
+        CHECK(angularDistance(f.attached()[0].angle, f.attached()[1].angle) < cfg.minSeparation);
+        const auto placements = f.takePlacements();
+        REQUIRE(placements.size() == std::size_t{2});
+        CHECK(!placements[1].closeCall); // overlapping is not a close call
+    }
+    {
+        // Shot 3 at the same spot is an ordinary needle again: it touches.
+        Rotor rotor(level.rotation);
+        Playfield f;
+        f.begin(level, cfg);
+        run(f, rotor, {10, 10 + rev, 10 + 2 * rev}, static_cast<int>(10 + 2 * rev + 240));
+        CHECK(f.status() == FieldStatus::Failed);
+        CHECK_EQ(f.placed(), 2);
+    }
+    {
+        // Without the ring, shot 2 already touches.
+        const LevelDef plain = constantLevel(3, speed);
+        Rotor rotor(plain.rotation);
+        Playfield f;
+        f.begin(plain, cfg);
+        run(f, rotor, {10, 10 + rev}, static_cast<int>(10 + rev + 240));
+        CHECK(f.status() == FieldStatus::Failed);
+    }
 }

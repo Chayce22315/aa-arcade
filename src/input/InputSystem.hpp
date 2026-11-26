@@ -91,6 +91,7 @@ private:
     void onGamepadButton(const SDL_GamepadButtonEvent& b);
     void onJoystickButton(const SDL_JoyButtonEvent& b);
     void onJoystickHat(const SDL_JoyHatEvent& h);
+    void onStick(InputDevice& d, float x, std::uint64_t ts);
     void onFinger(const SDL_TouchFingerEvent& f, std::uint32_t type);
     void onControllerAdded(InputDevice* d);
     void onControllerStart(InputDevice& d, std::uint64_t ts);
@@ -108,6 +109,7 @@ private:
     std::optional<std::uint32_t> pendingController_;
     std::bitset<kActionCount> systemHeld_;
     std::array<std::bitset<kActionCount>, 4> stationHeld_{};
+    std::array<std::bitset<kActionCount>, 4> tickHeld_{}; // station actions held as of the last drained tick
     std::function<int()> claimPolicy_;
     std::function<TouchContext()> touchContext_;
     struct Finger {

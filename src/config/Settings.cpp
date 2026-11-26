@@ -9,6 +9,7 @@
 
 #include "assets/ControllerDbPin.hpp"
 #include "engine/Branding.hpp"
+#include "gameplay/Modes.hpp"
 #include "gameplay/Powerups.hpp"
 
 namespace spindle::config {
@@ -28,6 +29,8 @@ constexpr Choice<FullscreenMode> kFullscreenAliases[] = {
     {"no", FullscreenMode::Windowed},    {"off", FullscreenMode::Windowed}};
 constexpr Choice<Difficulty> kDifficultyChoices[] = {
     {"easy", Difficulty::Easy}, {"normal", Difficulty::Normal}, {"hard", Difficulty::Hard}, {"expert", Difficulty::Expert}};
+constexpr Choice<RoundEndScreen> kRoundEndChoices[] = {
+    {"full", RoundEndScreen::Full}, {"short", RoundEndScreen::Short}, {"off", RoundEndScreen::Off}};
 constexpr Choice<AssignmentMode> kAssignmentChoices[] = {{"auto", AssignmentMode::Auto}, {"fixed", AssignmentMode::Fixed}};
 constexpr Choice<DisconnectAction> kDisconnectChoices[] = {{"pause", DisconnectAction::Pause},
                                                            {"continue", DisconnectAction::Continue}};
@@ -132,7 +135,8 @@ void visitAll(Settings& s, V& v) {
     v.integer("master_volume", s.audio.masterVolume, 0, 100, "overall volume");
     v.integer("sfx_volume", s.audio.sfxVolume, 0, 100, "gameplay sounds");
     v.integer("ui_volume", s.audio.uiVolume, 0, 100, "coin, join and menu sounds");
-    v.boolean("attract_sound", s.audio.attractSound, "1 = play sounds during attract mode");
+    v.integer("music_volume", s.audio.musicVolume, 0, 100, "music (played live, it builds up as players heat up), 0 = off");
+    v.boolean("attract_sound", s.audio.attractSound, "1 = play sounds and music during attract mode");
 
     v.section("Gameplay", "Round rules shared by every station. Speed values are uncalibrated: tune by feel.");
     v.integer("tries", s.gameplay.tries, 1, 9, "tries per player per match; a failed round costs one");
@@ -144,11 +148,13 @@ void visitAll(Settings& s, V& v) {
     v.seed("seed", s.gameplay.seed, "0 = new random levels each match; any other number repeats the same levels");
     v.boolean("powerups", s.gameplay.powerups, "1 = powerup rings appear on the circles from round 3 (never in sudden death)");
     v.powerupList("powerup_types", s.gameplay.powerupTypes,
-                  "which rings may appear: shield, skip, slim, mend, heat, purge, swift (comma list, or none); heat needs the fire meter");
+                  "which rings may appear: shield, skip, slim, mend, heat, purge, swift, gold, ghost (comma list, or none); heat needs the fire meter");
     v.boolean("fire_meter", s.gameplay.fireMeter, "1 = quick needles fill a combo meter; full = on fire, needles burn through (never in sudden death)");
     v.integer("fire_combo", s.gameplay.fireCombo, 4, 30, "combo points to catch fire; a needle is 1, a close call 2");
     v.real("fire_seconds", s.gameplay.fireSeconds, 0.5, 5.0, "seconds a player stays on fire");
     v.real("fire_chain_window", s.gameplay.fireChainWindow, 0.5, 5.0, "seconds allowed between needles before the combo drops");
+    v.choice("round_end_screen", s.gameplay.roundEndScreen, choices(kRoundEndChoices),
+             "full = scores are shot into the circles and the crown moves; short = the same, quicker; off = a plain pause");
 
     v.section("Bots", "Computer players follow exactly the same rules as humans.");
     v.integer("singleplayer_bots", s.bots.singleplayerBots, 0, 3, "bots joining a game with exactly one human");
@@ -161,14 +167,30 @@ void visitAll(Settings& s, V& v) {
     v.integer("credits_per_coin", s.arcade.creditsPerCoin, 1, 9, "credits added per coin");
     v.integer("credits_per_game", s.arcade.creditsPerGame, 1, 9, "credits each player pays to join");
     v.integer("max_credits", s.arcade.maxCredits, 1, 99, "coins above this are still counted but add no credits");
-    v.integer("join_window", s.arcade.joinWindow, 3, 30, "seconds other stations have to join after the first start");
+    v.integer("vote_seconds", s.arcade.voteSeconds, 10, 60, "seconds of the join and game mode vote screen after the first start");
     v.integer("game_over_time", s.arcade.gameOverTime, 3, 30, "seconds the results stay on screen");
     v.integer("exit_hold_seconds", s.arcade.exitHoldSeconds, 0, 10, "hold the exit key this long to quit; 0 = locked cabinet (service menu only)");
+    v.integer("initials_seconds", s.arcade.initialsSeconds, 10, 30, "seconds a player has to shoot their initials into the high score table");
+
+    v.section("Feedback", "Vibration on phones and rumble on gamepads.");
+    v.boolean("vibration", s.feedback.vibration, "1 = phones vibrate (needles, fails, fire, clears, the crown, the round end screen)");
+    v.integer("strength", s.feedback.strength, 0, 100, "how strong vibration and rumble are (phones without strength control only vary the length)");
+    v.boolean("gamepad_rumble", s.feedback.gamepadRumble, "1 = gamepads rumble for their own station's moments");
+
+    v.section("Accessibility", "Easier to read, easier on the eyes.");
+    v.boolean("accent_colors", s.accessibility.accentColors, "1 = each station gets its own colour (P1 cyan, P2 pink, P3 green, P4 orange)");
+    v.boolean("reduce_flashes", s.accessibility.reduceFlashes, "1 = softer fail flashes and no shaking");
+
+    v.section("Modes", "Game modes players can vote for (1 = on). With every mode off, battle stays on.");
+    for (std::size_t m = 0; m < gameplay::kModeCount; ++m)
+        v.boolean(std::string(gameplay::modeKey(gameplay::kAllModes[m])), s.modes.enabled[m], std::string(gameplay::modeBlurb(gameplay::kAllModes[m])));
 
     for (int i = 0; i < kStationCount; ++i) {
         v.section(std::format("Keys.Player{}", i + 1), i == 0 ? "Keyboard bindings: SDL scancode names, several keys separated by commas." : "");
         v.text("fire", s.stationKeys[static_cast<std::size_t>(i)].fire, false, "launch a needle");
         v.text("start", s.stationKeys[static_cast<std::size_t>(i)].start, false, "join / start");
+        v.text("left", s.stationKeys[static_cast<std::size_t>(i)].left, false, "previous letter / mode");
+        v.text("right", s.stationKeys[static_cast<std::size_t>(i)].right, false, "next letter / mode");
     }
 
     v.section("Keys.System", "Cabinet and service keys.");

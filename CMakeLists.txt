@@ -5,7 +5,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "16.4" CACHE STRING "Minimum iOS version")
 endif()
 
-project(spindle VERSION 1.0.0 LANGUAGES C CXX)
+project(spindle VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -76,6 +76,17 @@ add_subdirectory(third_party/lua-5.4.7)
 
 # ---------------------------------------------------------------- generated sources
 set(SPINDLE_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+# The commit goes into the replay build id (replays from another build are not shown). Read at configure
+# time; "unknown" outside a git checkout.
+set(SPINDLE_GIT_COMMIT "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+  execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE SPINDLE_GIT_COMMIT_OUT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE SPINDLE_GIT_RESULT)
+  if(SPINDLE_GIT_RESULT EQUAL 0 AND SPINDLE_GIT_COMMIT_OUT)
+    set(SPINDLE_GIT_COMMIT "${SPINDLE_GIT_COMMIT_OUT}")
+  endif()
+endif()
 configure_file(cmake/Version.hpp.in ${SPINDLE_GENERATED_DIR}/spindle/Version.hpp @ONLY)
 
 set(SPINDLE_EMBEDDED_FILES
@@ -94,7 +105,21 @@ set(SPINDLE_EMBEDDED_FILES
   audio/shield.wav
   audio/ignite.wav
   audio/burn.wav
-  art/flame.png)
+  audio/tally_tick_1.wav
+  audio/tally_tick_2.wav
+  audio/tally_tick_3.wav
+  audio/tally_tick_4.wav
+  audio/tally_done.wav
+  audio/crown.wav
+  audio/letter_shot.wav
+  audio/initials_done.wav
+  audio/vote_tick.wav
+  audio/vote_cast.wav
+  audio/wheel_tick.wav
+  audio/wheel_stop.wav
+  audio/mode_intro.wav
+  art/flame.png
+  whats_new.txt)
 spindle_embed_files(
   OUTPUT ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data
@@ -111,6 +136,7 @@ add_library(spindle_core STATIC
   src/assets/PngInfo.cpp
   ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   src/audio/Wav.cpp
+  src/audio/MusicSynth.cpp
   src/collision/Collision.cpp
   src/scripting/LuaSandbox.cpp
   src/gameplay/Powerups.cpp
@@ -119,12 +145,20 @@ add_library(spindle_core STATIC
   src/gameplay/LevelScript.cpp
   src/gameplay/Playfield.cpp
   src/gameplay/MatchRules.cpp
+  src/gameplay/Scoring.cpp
+  src/gameplay/Modes.cpp
   src/gameplay/Match.cpp
   src/players/PlayerManager.cpp
   src/bots/BotRuntime.cpp
   src/bots/BotController.cpp
   src/arcade/Credits.cpp
   src/arcade/Bookkeeping.cpp
+  src/arcade/HighScores.cpp
+  src/arcade/Progress.cpp
+  src/arcade/Replay.cpp
+  src/arcade/DailyCode.cpp
+  src/arcade/InitialsEntry.cpp
+  src/arcade/VoteBox.cpp
   src/arcade/ArcadeMachine.cpp
   src/input/Keybinds.cpp
   src/input/TouchZones.cpp
@@ -151,8 +185,23 @@ add_library(spindle_platform STATIC
   src/input/InputSystem.cpp
   src/audio/AudioSystem.cpp
   src/menus/Screens.cpp
-  src/menus/ServiceMenu.cpp)
+  src/menus/screens/Common.cpp
+  src/menus/screens/Field.cpp
+  src/menus/screens/Tally.cpp
+  src/menus/screens/Initials.cpp
+  src/menus/screens/Attract.cpp
+  src/menus/screens/Lobby.cpp
+  src/menus/screens/Results.cpp
+  src/menus/ServiceMenu.cpp
+  src/engine/Haptics.cpp)
 target_link_libraries(spindle_platform PUBLIC spindle_core SDL3::SDL3)
+if(IOS)
+  # iPhone haptics come from UIKit (SDL has none there).
+  enable_language(OBJCXX)
+  target_sources(spindle_platform PRIVATE src/engine/ios/HapticsIos.mm)
+  set_source_files_properties(src/engine/ios/HapticsIos.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc;-Wno-pedantic")
+  target_link_libraries(spindle_platform PUBLIC "-framework UIKit")
+endif()
 if(WIN32)
   target_link_libraries(spindle_platform PUBLIC winhttp)
 endif()
@@ -210,6 +259,15 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestMobile.cpp
     tests/TestMatchRules.cpp
     tests/TestMatch.cpp
+    tests/TestScoring.cpp
+    tests/TestHighScores.cpp
+    tests/TestProgress.cpp
+    tests/TestMusic.cpp
+    tests/TestReplay.cpp
+    tests/TestDailyCode.cpp
+    tests/TestInitials.cpp
+    tests/TestModes.cpp
+    tests/TestVote.cpp
     tests/TestPlayerManager.cpp
     tests/TestBots.cpp
     tests/TestCredits.cpp

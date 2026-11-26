@@ -30,6 +30,7 @@ struct InputDevice {
     std::vector<bool> rawButtons;
     std::vector<float> rawAxes;
     std::uint8_t hat = 0;
+    int stickDir = 0; // left stick / first axis as a digital left (-1) or right (1), with hysteresis
 };
 
 // A controller that disappeared while assigned to a station, remembered so the same controller can

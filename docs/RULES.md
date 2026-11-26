@@ -22,7 +22,51 @@ already placed, needles to place, rotation program, seed) at the same moment.
 
 Each station keeps its own placements, its own needles in flight and its own collision result.
 
-## Modes
+## Joining and the vote
+
+The first player to press start (with a credit) opens the **vote screen**. Others join by pressing
+start in their own column while it runs; joining costs a credit as before. Nobody can join once the
+match has started.
+
+- Nine game mode cards are shown (only the ones the operator switched on). Each joined player has a
+  cursor (P1-P4): **left / right** move it, **fire** (or start) votes for the card under it. A vote can
+  be changed until the clock runs out. CPUs do not vote.
+- The clock is `[Arcade] vote_seconds` (30 s). Once every joined player has voted it drops to 5 s; a
+  player joining in the last 5 s pushes it back to 5 s so they still get a vote.
+- The mode with the most votes wins. **A tie spins the wheel**: the tied modes are equal slices (50/50
+  for two), a needle shoots up and the slice it sticks in wins. Nobody voting puts every mode on it.
+- The chosen mode's card shows for 2 s, then the match starts.
+- With only one mode switched on, the screen is for joining only: pressing start again begins.
+- Touch: tap a column to join; a joined column splits into thirds (left / vote / right).
+
+## Game modes
+
+Every mode keeps the shared circle: all stations play the same round at the same time. Scores, the
+round end screen and the crown work in all of them; each mode has its own high score tables. The
+numbers are uncalibrated starting values.
+
+| Mode | Knock-outs | Ends | Winner |
+|---|---|---|---|
+| battle | tries | one player left | the last one standing (T1-T11 below) |
+| marathon | tries | everyone is out | the best score |
+| blitz | none; a failed round costs 50 x R points | the 90 s match clock runs out (only time spent playing counts; the last round stops where it is, without a clear bonus) | the best score |
+| race | none | someone has taken 5 rounds | first to 5; the first player to clear a round takes it (same tick: both) |
+| crown | none | after 8 rounds | the most crown points: one for holding the crown at each round end |
+| sabotage | tries | one player left | the last one standing; each clear, and every third close call in a round, sends a junk needle into every rival's next round (at most 4 per round, only where the round stays playable) |
+| teams | a shared pool per team (tries x 2) | one team left | P1 + P2 against P3 + P4; CPUs fill every empty seat; a failed round costs the team one try, an empty pool knocks the whole team out |
+| chaos | tries | one player left | the last one standing; every round rolls one mutator for everyone: blind (needles fade a moment after they stick), tiny balls, big balls, fast, or 2 extra needles - kept only if the round stays playable |
+| daily | tries | everyone is out | the best score; the levels come from the local date, so everyone gets the same ones that day; its table keeps today's scores only |
+
+- **Score ties** (marathon, blitz, race, crown, daily): the mode's own count (rounds won, crown
+  points), then score, then needles placed, then rounds cleared, then the lowest station.
+- **Teams tie** (both pools empty in the same round): the team with the better combined score, then
+  needles, then rounds cleared.
+- A race nobody clears for 3 rounds in a row ends on score.
+- Mend gives a try back only in modes with personal tries.
+- In a blind round CPUs aim with 1.5x their usual timing error, since they read the circle as data.
+- The attract demo plays a random switched-on mode each time.
+
+## Singleplayer and multiplayer
 
 | Humans | Mode | Bots added |
 |---|---|---|
@@ -91,6 +135,8 @@ and the identical round conditions are untouched.
 | heat | small flame | sets the station on fire at once (see the fire meter). Only appears while the fire meter is on. |
 | purge | cross | burns away the two pre-placed needles nearest to where the ring was taken (never a player's own needles) |
 | swift | double chevron | this station's needles fly 1.6x faster for the rest of the round, so there is less to lead |
+| gold | coin | for 5 s, every needle this station places scores double (on top of the combo or fire multiplier); the needle that takes the ring is scored before it takes it |
+| ghost | dashed ring | the next needle this station fires touches nothing in flight and sticks wherever it lands, even right on another needle (not a close call); once stuck it is an ordinary needle that later needles can touch. A needle fired while on fire stays a fire needle and the ghost waits for the next one |
 
 - Rounds 3-8 have one ring, 9-15 two, 16 on three (fewer when the circle is too crowded to place
   them clear of the pre-placed needles). At most one ring per round is a mend, and at most one is a heat.
@@ -129,22 +175,139 @@ when empty and fills with colour from the bottom as the combo grows.
 - Bots fill the meter by the same rule. When they catch fire they press fire at a human-like mashing
   rate (`mash` in the bot profiles), never faster than a person could.
 
+## Score
+
+Every player builds a score over the match. Scores are hidden while a round is played; the round end
+screen reveals them. All values are uncalibrated (tune by feel); R is the round number.
+
+| Earned while playing (round points) | Points |
+|---|---|
+| a needle placed | 10 x R |
+| a close call (the fire meter's rule: within 1.4x the minimum gap) | +5 x R |
+| combo multiplier (fire meter on) | x (1 + the meter's fill before the needle), so x1 to x2 |
+| on fire | x2 (instead of the combo multiplier) |
+| a needle your fire needle or a purge burnt away | +5 x R each |
+| a powerup ring taken | +25 x R |
+
+| Bonus (added at the round end, cleared players only) | Points |
+|---|---|
+| clearing the round | 100 x R |
+| time left on the round clock | +2 x R per whole second |
+| the first clear, when two or more players are in the round (same tick = both) | +50 x R |
+
+Totals are capped at 9,999,999 (seven digits). Bots score by the same rules.
+
+## Round end screen
+
+When a round ends, every circle in it lights up, humans and CPUs alike. Ammo balls carrying the
+digits of each player's new **total** fire into the core, biggest digit first, and type the number in.
+Then three lines slide in under the circle: `total` (all rounds), `round +` (this round's points) and
+`bonus +`. Then the crown moves. Players knocked out in earlier rounds keep showing their final total,
+dimmed. The timeline comes from the core (`gameplay/Scoring.hpp`), so screen, sounds and tests agree.
+`[Gameplay] round_end_screen` picks `full` (about 3 to 4.5 s), `short` (about 2 s) or `off` (a plain
+pause; the numbers appear at once).
+
+## Crown
+
+- The player with the most **round points** (the bonus does not count) wins the round and takes the
+  **crown**: a gold crown next to their station name and a rainbow rim around their circle.
+- It stays with them in later rounds until someone else wins a round outright; that is how players take
+  it during the match. When it changes hands it flies across on the round end screen.
+- **Ties:** nobody new takes it; a holder in the tie keeps it. Nobody takes it with zero points.
+- A holder who is knocked out loses it (it tumbles off); the round's outright winner among the players
+  still in can take it at the same round end.
+- It is cosmetic: no rule, timer or tie-break looks at it.
+
+## High scores
+
+- Each game mode keeps an **all-time** top 10 and a **today** top 10 (today's tables empty themselves
+  when the local date changes). Only humans enter them; a score has to be above zero and beat a row.
+  An equal score ranks below the row already there.
+- **Knocked-out players shoot their initials in their own column while the others play on**, as soon
+  as the round end screen of the round they went out in is over. Survivors and the winner shoot theirs
+  after the last round end screen, before the results.
+- **Shooting initials:** the next ammo ball shows a letter. Left and right turn the letter wheel
+  (`A-Z`, `0-9`, `<` = delete, `end` = done; hold to spin); fire (or start) shoots the letter into the
+  circle. Up to 6 letters; the sixth finishes. `[Arcade] initials_seconds` (15 by default) runs down on
+  a ring around the circle; when it runs out whatever was typed is saved, or the station tag (`P2`) if
+  nothing was.
+- The row is reserved under the station tag the moment a player qualifies, so two players qualifying
+  at once can never push each other out: an unreserved row gives way instead, even one with a slightly
+  higher score.
+- The attract loop shows the tables; the service menu shows and clears them.
+
+## Replays
+
+Every match humans play is recorded: its exact settings, its line-up and every fire press of every station
+(CPUs included), tick by tick. When a match puts a player at the top of its mode's table (today's table
+for daily), the match is kept as that mode's record game in `replays/<mode>.txt`, with the record holder's
+name. Two players topping the table in the same match: the higher score names it (it is the same game).
+
+On the attract loop, a mode's record game plays (the first 75 seconds at most) just before that mode's
+high score table, with "record game", the name and the score on screen. A replay needs no CPUs: the match
+is deterministic, so the presses alone play the same game. Replays are only shown by the build that
+recorded them, with the same level script (a build id of version, commit and level script hash); others
+are skipped and the log says why. Clearing the high scores clears the replays too.
+
+## Daily score code
+
+The results of a daily game show each player a 12-character code (`XXXX-XXXX-XXXX`) that carries the
+date and the score with a check made from SHA-256, so a friend (or the operator, on the service menu's
+"daily code check" page) can see a typo at once. It proves nothing: spindle is open source, so anyone can
+make a valid code for any score. Codes read leniently: any case, dashes optional, O read as 0 and I or L
+as 1.
+
+## Achievements
+
+The cabinet keeps lifetime stats and 14 achievements in `progress.ini`. spindle has no player accounts,
+so they belong to the machine: whoever earns one earns it for everyone. Only humans earn them, never the
+attract demo. An achievement pops up in the column of the player who earned it.
+
+| Achievement | How | Unlocks |
+|---|---|---|
+| first pin | place a needle | |
+| round 10 | reach round 10 | |
+| round 25 | reach round 25 | comet trails: needles in flight leave a tail |
+| close shaves | 5 close calls in one game | |
+| hot hands | catch fire 3 times in one game | blue flames |
+| crowned | take the crown | |
+| royalty | take the crown 5 times in one game | royal crown: a velvet cap and jewels |
+| ring collector | take 5 rings in one game | |
+| ten thousand | score 10000 in one game | |
+| six figures | score 100000 in one game | |
+| on the board | shoot your initials into a high score table | |
+| flawless | win a game with knock-outs against at least one other player without losing a try (not teams) | |
+| tourist | finish a game in every mode | |
+| thousand needles | 1000 needles placed by humans on this machine | |
+
+A look starts switched on when it unlocks; the service menu's progress page (and, on phones, the options
+behind the gear) switches unlocked looks on and off. Looks are only drawing: they change nothing in play.
+The attract loop shows the machine's stats after the high scores once a game has been played. Values are
+uncalibrated.
+
 ## Standings
 
 The game-over screen ranks players: winner first, then by the round they were eliminated in (later is
 better), then by the tick they failed on (later is better), then by needles placed over the match.
+It shows each player's final score next to their rank.
 
 ## Touch (phones and tablets)
 
 On a phone or tablet the screen is the cabinet: the four stations are its four columns.
 
-- **Joining:** tap a column to join at that station (phones default to free play, so no coin is
-  needed); tap your column again to start straight away, or wait for the join timer.
+- **Joining and voting:** tap a column to join at that station (phones default to free play, so no
+  coin is needed). On the vote screen a joined column splits into thirds: left / vote / right.
 - **One player** (usually a phone against bots): tap anywhere to fire.
 - **Several players** (around a tablet): each player taps their own column; taps on a bot's column do
   nothing. Every finger counts on its own, so players can tap at the same time.
+- **Pause:** in a match with one human, a pause button sits in the top-right corner; tapping it pauses
+  like leaving the app does.
+- **Options:** the gear in the top-right corner of attract opens the player options.
 - **Leaving the app** (home button, a call) pauses a running match; it shows `paused` and continues when
   a player taps (that tap does not launch a needle). Rules, timers and tie-breaks are unchanged.
+- **Initials:** a column shooting initials splits into thirds: tap the left third for the previous
+  letter, the right third for the next, the middle to shoot it. When the only human left is entering
+  initials, the whole screen splits that way.
 - The top-left corner is reserved for the operator gesture (see docs/SERVICE_MENU.md).
 
 ## Timing and input

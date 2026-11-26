@@ -34,9 +34,11 @@ void Playfield::begin(const LevelDef& level, const FieldConfig& config) {
     queue_ = level.launchCount;
     attached_.reserve(level.prepins.size() + static_cast<std::size_t>(level.launchCount));
     angles_.reserve(attached_.capacity());
-    for (double a : level.prepins) {
-        attached_.push_back({collision::wrapAngle(a), true});
-        angles_.push_back(collision::wrapAngle(a));
+    const std::size_t firstJunk = level.prepins.size() - std::min(level.prepins.size(), static_cast<std::size_t>(std::max(0, level.junk)));
+    for (std::size_t i = 0; i < level.prepins.size(); ++i) {
+        const double a = collision::wrapAngle(level.prepins[i]);
+        attached_.push_back({a, true, i >= firstJunk, 0});
+        angles_.push_back(a);
     }
     ballRadius_ = config.ballRadius;
     minSeparation_ = config.minSeparation;
@@ -53,7 +55,10 @@ bool Playfield::canFireAt(std::uint64_t tick) const {
 
 bool Playfield::fire(std::uint64_t tick) {
     if (!canFireAt(tick)) return false;
-    flying_.push_back({config_.launchDistance, queue_, onFire(tick)});
+    const bool fireNeedle = onFire(tick);
+    const bool ghost = ghost_ && !fireNeedle; // a fire needle already goes through; the ghost waits for the next one
+    if (ghost) ghost_ = false;
+    flying_.push_back({config_.launchDistance, queue_, fireNeedle, ghost});
     --queue_;
     lastFireTick_ = tick;
     return true;
@@ -74,6 +79,14 @@ void Playfield::failTimeout(std::uint64_t tick) {
     failReason_ = FailReason::Timeout;
     failTick_ = tick;
     combo_ = 0;
+}
+
+void Playfield::stopForClock(std::uint64_t tick) {
+    if (status_ != FieldStatus::Playing) return;
+    status_ = FieldStatus::Failed;
+    failReason_ = FailReason::Clock;
+    failTick_ = tick;
+    flying_.clear();
 }
 
 bool Playfield::absorb(std::uint64_t tick, std::size_t flyingIndex) {
@@ -117,9 +130,12 @@ int Playfield::chainTicksLeft(std::uint64_t tick) const {
 
 void Playfield::setCombo(int combo) { combo_ = config_.fireEnabled ? std::clamp(combo, 0, std::max(0, config_.fireCombo - 1)) : 0; }
 
-void Playfield::scorePlacement(double nearestGap, std::uint64_t tick) {
+void Playfield::scorePlacement(double nearestGap, std::uint64_t tick, bool ghost) {
+    // A ghost may land right on top of another needle: that is not a close call.
+    const bool closeCall = !ghost && nearestGap < kCloseCallFactor * minSeparation_;
+    newPlacements_.push_back({closeCall, comboFill(), onFire(tick), config_.fireEnabled, gold(tick)});
     if (config_.fireEnabled && !onFire(tick)) {
-        const int points = nearestGap < kCloseCallFactor * minSeparation_ ? 2 : 1;
+        const int points = closeCall ? 2 : 1;
         const bool chained = lastPlaceTick_ && tick <= *lastPlaceTick_ + static_cast<std::uint64_t>(config_.chainWindowTicks);
         combo_ = chained ? combo_ + points : points;
         if (combo_ >= config_.fireCombo) ignite(tick);
@@ -163,6 +179,10 @@ void Playfield::claimAt(double relAngle, std::uint64_t tick) {
             swift_ = true;
             needleSpeed_ = config_.needleSpeed * powerup::kSwiftFactor;
             break;
+        case PowerupKind::Gold:
+            goldUntil_ = tick + static_cast<std::uint64_t>(std::llround(powerup::kGoldSeconds * geom::kTickRate));
+            break;
+        case PowerupKind::Ghost: ghost_ = true; break;
         }
         return; // rings are spaced so one needle can take at most one
     }
@@ -181,9 +201,12 @@ void Playfield::step(std::uint64_t tick, double dt, double angleBefore, double a
             for (std::size_t i = 0; i < flying_.size();) {
                 const double next = flying_[i].distance - travelStep;
                 const bool fireNeedle = flying_[i].fire;
+                const bool ghost = flying_[i].ghost;
                 if (next <= config_.needleLength) {
                     const double rel = collision::wrapAngle(geom::kAttachAngle - angle);
-                    if (fireNeedle) {
+                    if (ghost) {
+                        // Sticks wherever it lands; from now on it is an ordinary needle.
+                    } else if (fireNeedle) {
                         while (auto hit = collision::findAttachConflict(rel, angles_, minSeparation_)) burn(*hit, tick);
                     } else if (auto hit = collision::findAttachConflict(rel, angles_, minSeparation_)) {
                         if (absorb(tick, i)) continue;
@@ -193,16 +216,18 @@ void Playfield::step(std::uint64_t tick, double dt, double angleBefore, double a
                     }
                     double nearest = geom::kPi;
                     for (double a : angles_) nearest = std::min(nearest, collision::angularDistance(rel, a));
-                    attached_.push_back({rel, false});
+                    attached_.push_back({rel, false, false, tick});
                     angles_.push_back(rel);
                     ++placed_;
                     ++revision_;
                     flying_.erase(flying_.begin() + static_cast<std::ptrdiff_t>(i));
-                    scorePlacement(nearest, tick);
+                    scorePlacement(nearest, tick, ghost);
                     claimAt(rel, tick);
                     continue;
                 }
-                if (fireNeedle) {
+                if (ghost) {
+                    // passes through everything in flight
+                } else if (fireNeedle) {
                     while (auto hit = collision::findFlightConflict(next, angle, angles_, config_.needleLength, ballRadius_)) burn(*hit, tick);
                 } else if (auto hit = collision::findFlightConflict(next, angle, angles_, config_.needleLength, ballRadius_)) {
                     if (absorb(tick, i)) continue;
@@ -231,6 +256,12 @@ int Playfield::takeShieldBreaks() {
     const int n = newShieldBreaks_;
     newShieldBreaks_ = 0;
     return n;
+}
+
+std::vector<scoring::Placement> Playfield::takePlacements() {
+    std::vector<scoring::Placement> out;
+    out.swap(newPlacements_);
+    return out;
 }
 
 int Playfield::takeIgnitions() {

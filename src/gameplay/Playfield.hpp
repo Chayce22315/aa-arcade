@@ -6,11 +6,13 @@
 
 #include "gameplay/LevelDef.hpp"
 #include "gameplay/Powerups.hpp"
+#include "gameplay/Scoring.hpp"
 
 namespace spindle::gameplay {
 
 enum class FieldStatus { Idle, Playing, Cleared, Failed };
-enum class FailReason { None, Collision, Timeout };
+// Clock: the blitz match clock ran out mid-round (not a failure: no try, no penalty, no clear bonus).
+enum class FailReason { None, Collision, Timeout, Clock };
 
 struct FieldConfig {
     double needleLength = 0.0;
@@ -37,12 +39,15 @@ inline constexpr double kCloseCallFactor = 1.4;
 struct AttachedNeedle {
     double angle = 0.0; // relative to the rotor
     bool preplaced = false;
+    bool junk = false;       // sabotage: sent by a rival
+    std::uint64_t tick = 0;  // when it stuck (0 for pre-placed needles); blind rounds hide it after a moment
 };
 
 struct FlyingNeedle {
     double distance = 0.0; // below the circle centre
     int number = 0;        // the countdown number it carried in the queue
     bool fire = false;     // launched while the station was on fire: burns through other needles
+    bool ghost = false;    // launched with a ghost ring armed: touches nothing, sticks wherever it lands
 };
 
 struct PickupState {
@@ -72,6 +77,8 @@ public:
     void step(std::uint64_t tick, double dt, double angleBefore, double angleDelta);
 
     void failTimeout(std::uint64_t tick);
+    // Blitz: the match clock ran out while this station was still playing.
+    void stopForClock(std::uint64_t tick);
 
     FieldStatus status() const { return status_; }
     FailReason failReason() const { return failReason_; }
@@ -99,6 +106,9 @@ public:
     bool shieldArmed() const { return shield_; }
     bool slim() const { return slim_; }
     bool swift() const { return swift_; }
+    bool ghostArmed() const { return ghost_; }             // the next needle fired will be a ghost
+    bool gold(std::uint64_t tick) const { return goldUntil_ > tick; }
+    std::uint64_t goldUntilTick() const { return goldUntil_; }
     std::optional<PowerupKind> lastClaim() const { return lastClaim_; }
     std::uint64_t lastClaimTick() const { return lastClaimTick_; }
     std::uint64_t shieldBreakTick() const { return shieldBreakTick_; }
@@ -122,6 +132,8 @@ public:
 
     // Claims, shield breaks, ignitions and burns since the last call (the match turns them into events).
     std::vector<PowerupKind> takeClaims();
+    // How each needle that stuck since the last call landed (the match turns them into points).
+    std::vector<scoring::Placement> takePlacements();
     int takeShieldBreaks();
     int takeIgnitions();
     int takeBurns();
@@ -133,7 +145,7 @@ private:
     void claimAt(double relAngle, std::uint64_t tick);
     void burn(std::size_t attachedIndex, std::uint64_t tick);
     void ignite(std::uint64_t tick);
-    void scorePlacement(double nearestGap, std::uint64_t tick);
+    void scorePlacement(double nearestGap, std::uint64_t tick, bool ghost);
 
     FieldConfig config_{};
     FieldStatus status_ = FieldStatus::Idle;
@@ -158,6 +170,8 @@ private:
     bool shield_ = false;
     bool slim_ = false;
     bool swift_ = false;
+    bool ghost_ = false;
+    std::uint64_t goldUntil_ = 0;
     int claimed_ = 0;
     std::optional<PowerupKind> lastClaim_;
     std::uint64_t lastClaimTick_ = 0;
@@ -171,6 +185,7 @@ private:
     std::uint64_t fireUntil_ = 0;
     std::vector<BurnMark> burns_;
     int newIgnitions_ = 0;
+    std::vector<scoring::Placement> newPlacements_;
     int newBurns_ = 0;
     std::uint32_t revision_ = 0;
 };

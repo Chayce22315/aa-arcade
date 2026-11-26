@@ -1,4 +1,5 @@
 #include "Test.hpp"
+#include "config/Settings.hpp"
 #include "input/Keybinds.hpp"
 
 using namespace spindle::input;
@@ -24,4 +25,25 @@ TEST_CASE(keybind_lists_and_buttons) {
     CHECK(buttonNames("none").empty());
     CHECK(isStationAction(Action::Fire));
     CHECK(!isStationAction(Action::Coin));
+}
+
+TEST_CASE(keybind_left_right_are_station_actions_with_distinct_defaults) {
+    CHECK(isStationAction(Action::Left));
+    CHECK(isStationAction(Action::Right));
+    CHECK(!isStationAction(Action::MenuLeft));
+    const auto d = spindle::config::Settings::defaults();
+    // The user's layout: P1 W/D, P2 J/K, P3 arrows, P4 F/H.
+    const char* want[4][2] = {{"W", "D"}, {"J", "K"}, {"Left", "Right"}, {"F", "H"}};
+    std::vector<std::string> all;
+    for (std::size_t s = 0; s < 4; ++s) {
+        CHECK_EQ(d.stationKeys[s].left, std::string(want[s][0]));
+        CHECK_EQ(d.stationKeys[s].right, std::string(want[s][1]));
+        for (const std::string* k : {&d.stationKeys[s].fire, &d.stationKeys[s].start, &d.stationKeys[s].left, &d.stationKeys[s].right})
+            all.push_back(canonicalKeyName(*k));
+    }
+    // No two station bindings share a key (P3's arrows also drive the service menu, which is fine).
+    for (std::size_t i = 0; i < all.size(); ++i)
+        for (std::size_t j = i + 1; j < all.size(); ++j) CHECK(all[i] != all[j]);
+    for (const char* sys : {"5", "9", "F2", "Escape", "Return", "Backspace", "Up", "Down"})
+        for (const auto& k : all) CHECK(k != sys);
 }

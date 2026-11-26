@@ -75,6 +75,7 @@ void AudioSystem::setVolumes(const config::Settings::Audio& v) {
     master_.store(static_cast<float>(std::clamp(v.masterVolume, 0, 100)) / 100.0f);
     sfx_.store(static_cast<float>(std::clamp(v.sfxVolume, 0, 100)) / 100.0f);
     ui_.store(static_cast<float>(std::clamp(v.uiVolume, 0, 100)) / 100.0f);
+    music_.store(static_cast<float>(std::clamp(v.musicVolume, 0, 100)) / 100.0f);
 }
 
 void AudioSystem::play(SoundId id) {
@@ -120,6 +121,8 @@ void AudioSystem::mix(int frames) {
         v.position += n;
         if (v.position >= v.clip->size()) v.clip = nullptr;
     }
+    synth_.setCue(static_cast<MusicScene>(musicScene_.load()), musicIntensity_.load());
+    synth_.render(buffer_.data(), frames, music_.load());
     for (float& s : buffer_) s = std::clamp(s * master, -1.0f, 1.0f);
 }
 

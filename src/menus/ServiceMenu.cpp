@@ -5,6 +5,7 @@
 #include <format>
 #include <numbers>
 
+#include "arcade/DailyCode.hpp"
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
 #include "gameplay/Powerups.hpp"
@@ -57,7 +58,15 @@ void ServiceMenu::open(bool byTouch) {
     log::info("service: menu opened");
 }
 
+void ServiceMenu::openPlayerOptions() {
+    open(true);
+    playerMode_ = true;
+    show(PageId::PlayerOptions);
+    log::info("service: player options opened");
+}
+
 void ServiceMenu::close(bool save) {
+    playerMode_ = false;
     host_.inputSystem().cancelCapture();
     capture_ = Capture::None;
     if (save) {
@@ -142,6 +151,61 @@ MenuItem ServiceMenu::keyItem(std::string label, std::string& binding) {
 
 // ------------------------------------------------------------------ pages
 
+// Vibration (phones) and rumble (gamepads); every change buzzes once so the operator can feel it.
+void ServiceMenu::addFeedbackItems(std::vector<MenuItem>& items) {
+    auto buzz = [this](MenuItem m) {
+        auto inner = m.adjust;
+        m.adjust = [this, inner](int d) {
+            inner(d);
+            host_.previewFeedback(edit_.feedback);
+        };
+        return m;
+    };
+    if (host_.touchUi()) {
+        MenuItem vib = buzz(boolItem("vibration", edit_.feedback.vibration));
+        vib.separatorBefore = true;
+        if (!host_.phoneVibrates()) {
+            vib.enabled = false;
+            vib.value = [] { return std::string("not on this device"); };
+        }
+        items.push_back(std::move(vib));
+    }
+    MenuItem rumble = buzz(boolItem("gamepad rumble", edit_.feedback.gamepadRumble));
+    rumble.separatorBefore = !host_.touchUi();
+    items.push_back(std::move(rumble));
+    items.push_back(buzz(intItem(host_.touchUi() ? "vibration strength" : "rumble strength", edit_.feedback.strength, 0, 100, 10, "%")));
+}
+
+// The looks achievements unlock. They belong to the cabinet's progress, not to settings.ini, so a change
+// is saved at once (save & exit or not).
+void ServiceMenu::addLookItems(std::vector<MenuItem>& items, bool unlockedOnly) {
+    bool first = true;
+    for (std::size_t i = 0; i < arcade::kLookCount; ++i) {
+        const auto look = static_cast<arcade::Look>(i);
+        const bool open = host_.arcadeMachine().progress().unlocked(look);
+        if (unlockedOnly && !open) continue;
+        MenuItem m;
+        m.label = std::string(arcade::lookName(look));
+        m.separatorBefore = first;
+        first = false;
+        m.enabled = open;
+        m.value = [this, look, open] {
+            if (open) return std::string(host_.arcadeMachine().progress().lookOn(look) ? "on" : "off");
+            for (std::size_t k = 0; k < arcade::kAchievementCount; ++k) {
+                const auto info = arcade::achievementInfo(static_cast<arcade::Achievement>(k));
+                if (info.unlocks == look) return std::format("locked - {}", info.blurb);
+            }
+            return std::string("locked");
+        };
+        m.adjust = [this, look](int) {
+            auto& p = host_.arcadeMachine().progress();
+            p.setLook(look, !p.lookOn(look));
+            host_.saveProgress();
+        };
+        items.push_back(std::move(m));
+    }
+}
+
 void ServiceMenu::show(PageId id) {
     pageId_ = id;
     pendingConfirm_.clear();
@@ -165,7 +229,11 @@ void ServiceMenu::build(PageId id) {
         items.push_back(pageItem("game settings", PageId::Game));
         items.push_back(pageItem("coin settings", PageId::Coin));
         items.push_back(pageItem("bot settings", PageId::Bots));
+        items.push_back(pageItem("game modes", PageId::Modes));
         items.push_back(pageItem("bookkeeping", PageId::Bookkeeping));
+        items.push_back(pageItem("high scores", PageId::HighScores));
+        items.push_back(pageItem("progress", PageId::Progress));
+        items.push_back(pageItem("daily code check", PageId::DailyCode));
         MenuItem reset = actionItem("reset defaults", [this] {
             if (confirm("reset")) {
                 edit_ = host_.defaultSettings();
@@ -236,6 +304,8 @@ void ServiceMenu::build(PageId id) {
             auto& k = edit_.stationKeys[static_cast<std::size_t>(s)];
             items.push_back(keyItem(std::format("P{} fire", s + 1), k.fire));
             items.push_back(keyItem(std::format("P{} start", s + 1), k.start));
+            items.push_back(keyItem(std::format("P{} left", s + 1), k.left));
+            items.push_back(keyItem(std::format("P{} right", s + 1), k.right));
         }
         auto& sk = edit_.systemKeys;
         MenuItem coin = keyItem("coin", sk.coin);
@@ -267,6 +337,32 @@ void ServiceMenu::build(PageId id) {
         }
         break;
     }
+    case PageId::PlayerOptions: {
+        title = "options";
+        auto preview = [this](MenuItem m) {
+            auto inner = m.adjust;
+            m.adjust = [this, inner](int d) {
+                inner(d);
+                host_.previewVolumes(edit_.audio);
+                host_.playSound(audio::SoundId::NeedleHit);
+            };
+            return m;
+        };
+        items.push_back(preview(intItem("volume", edit_.audio.masterVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("music", edit_.audio.musicVolume, 0, 100, 5, "%")));
+        addFeedbackItems(items);
+        addLookItems(items, true);
+        MenuItem flashes = boolItem("reduce flashes", edit_.accessibility.reduceFlashes);
+        flashes.separatorBefore = true;
+        items.push_back(std::move(flashes));
+        items.push_back(boolItem("player colours", edit_.accessibility.accentColors));
+        MenuItem done = actionItem("done", [this] { close(true); });
+        done.separatorBefore = true;
+        items.push_back(std::move(done));
+        break;
+    }
     case PageId::Video: {
         title = "video";
         MenuItem res;
@@ -289,6 +385,8 @@ void ServiceMenu::build(PageId id) {
         };
         items.push_back(std::move(fs));
         items.push_back(boolItem("vsync", edit_.display.vsync));
+        items.push_back(boolItem("reduce flashes", edit_.accessibility.reduceFlashes));
+        items.push_back(boolItem("player colours", edit_.accessibility.accentColors));
         items.push_back(intItem("monitor", edit_.display.displayIndex, 0, std::max(0, host_.display().displayCount() - 1)));
         MenuItem fps;
         fps.label = "frame cap (vsync off)";
@@ -326,7 +424,9 @@ void ServiceMenu::build(PageId id) {
         items.push_back(preview(intItem("master", edit_.audio.masterVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("coin and menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("music", edit_.audio.musicVolume, 0, 100, 5, "%")));
         items.push_back(boolItem("attract sound", edit_.audio.attractSound));
+        addFeedbackItems(items);
         break;
     }
     case PageId::Game: {
@@ -370,6 +470,21 @@ void ServiceMenu::build(PageId id) {
         items.push_back(intItem("  combo to catch fire", edit_.gameplay.fireCombo, 4, 30));
         items.push_back(realItem("  seconds on fire", edit_.gameplay.fireSeconds, 0.5, 5.0, 0.25));
         items.push_back(realItem("  combo chain window", edit_.gameplay.fireChainWindow, 0.5, 5.0, 0.25));
+        MenuItem tally;
+        tally.label = "round end screen";
+        tally.separatorBefore = true;
+        tally.value = [this] {
+            switch (edit_.gameplay.roundEndScreen) {
+            case config::RoundEndScreen::Full: return std::string("full");
+            case config::RoundEndScreen::Short: return std::string("short");
+            case config::RoundEndScreen::Off: return std::string("off");
+            }
+            return std::string("full");
+        };
+        tally.adjust = [this](int dir) {
+            cycle(edit_.gameplay.roundEndScreen, {config::RoundEndScreen::Full, config::RoundEndScreen::Short, config::RoundEndScreen::Off}, dir);
+        };
+        items.push_back(std::move(tally));
         break;
     }
     case PageId::Coin: {
@@ -378,8 +493,9 @@ void ServiceMenu::build(PageId id) {
         items.push_back(intItem("credits per coin", edit_.arcade.creditsPerCoin, 1, 9));
         items.push_back(intItem("credits per player", edit_.arcade.creditsPerGame, 1, 9));
         items.push_back(intItem("max credits", edit_.arcade.maxCredits, 1, 99));
-        items.push_back(intItem("join window", edit_.arcade.joinWindow, 3, 30, 1, " s"));
+        items.push_back(intItem("vote time", edit_.arcade.voteSeconds, 10, 60, 1, " s"));
         items.push_back(intItem("game over time", edit_.arcade.gameOverTime, 3, 30, 1, " s"));
+        items.push_back(intItem("initials time", edit_.arcade.initialsSeconds, 10, 30, 1, " s"));
         MenuItem hold = intItem("exit hold", edit_.arcade.exitHoldSeconds, 0, 10, 1, " s");
         auto base = hold.value;
         hold.value = [this, base] { return edit_.arcade.exitHoldSeconds == 0 ? std::string("locked") : base(); };
@@ -418,6 +534,10 @@ void ServiceMenu::build(PageId id) {
         row("won by players", [&bk] { return std::to_string(bk.humanWins); });
         row("won by bots", [&bk] { return std::to_string(bk.botWins); });
         row("play time", [&bk] { return formatDuration(bk.playSeconds); });
+        for (std::size_t i = 0; i < bk.recentWinners.size(); ++i) {
+            const arcade::WinnerRecord w = bk.recentWinners[i];
+            row(i == 0 ? "recent winners" : "", [w] { return std::format("P{} {}  round {}", w.station + 1, w.bot ? "cpu" : "player", w.round); });
+        }
         MenuItem clear = actionItem("clear bookkeeping", [this, &bk] {
             if (confirm("clear")) {
                 bk.clearCounters();
@@ -429,6 +549,142 @@ void ServiceMenu::build(PageId id) {
         clear.value = [this] { return std::string(pendingConfirm_ == "clear" ? "press again to confirm" : ""); };
         clear.separatorBefore = true;
         items.push_back(std::move(clear));
+        break;
+    }
+    case PageId::Modes: {
+        title = "game modes";
+        items.push_back(intItem("vote time", edit_.arcade.voteSeconds, 10, 60, 1, " s"));
+        for (std::size_t m = 0; m < gameplay::kModeCount; ++m) {
+            MenuItem it = boolItem(std::string(gameplay::modeName(gameplay::kAllModes[m])), edit_.modes.enabled[m]);
+            if (m == 0) it.separatorBefore = true;
+            items.push_back(std::move(it));
+        }
+        MenuItem note;
+        note.label = "with every mode off, battle stays on";
+        note.enabled = false;
+        note.separatorBefore = true;
+        items.push_back(std::move(note));
+        break;
+    }
+    case PageId::HighScores: {
+        title = "high scores";
+        auto& hs = host_.arcadeMachine().highScores();
+        const auto addRows = [&](std::string_view table, bool today) {
+            const auto& t = today ? hs.tables(table).today : hs.tables(table).allTime;
+            MenuItem head;
+            head.label = std::format("{} - {}", table, today ? "today" : "all time");
+            head.value = [&t] { return t.empty() ? std::string("empty") : std::format("{} rows", t.rows().size()); };
+            head.enabled = false;
+            head.separatorBefore = true;
+            items.push_back(std::move(head));
+            for (std::size_t i = 0; i < t.rows().size(); ++i) {
+                const arcade::ScoreEntry e = t.rows()[i];
+                MenuItem m;
+                m.label = std::format("  {}  {}", i + 1, e.name);
+                m.value = [e] { return std::format("{}   round {}   {}", e.score, e.round, e.date); };
+                m.enabled = false;
+                items.push_back(std::move(m));
+            }
+        };
+        for (std::string_view table : arcade::ArcadeMachine::kScoreTables) {
+            addRows(table, false);
+            addRows(table, true);
+        }
+        MenuItem clear = actionItem("clear high scores", [this, &hs] {
+            if (confirm("clear scores")) {
+                hs.clearAll();
+                host_.saveHighScores();
+                host_.arcadeMachine().clearReplays(); // a record game without its table means nothing
+                host_.saveReplays();
+                notice_ = "high scores cleared";
+                noticeTime_ = 3.0;
+                rebuildPending_ = true;
+            }
+        });
+        clear.value = [this] { return std::string(pendingConfirm_ == "clear scores" ? "press again to confirm" : ""); };
+        clear.separatorBefore = true;
+        items.push_back(std::move(clear));
+        break;
+    }
+    case PageId::DailyCode: {
+        title = "daily code check";
+        MenuItem code;
+        code.label = "code";
+        code.enabled = false;
+        code.value = [this] {
+            std::string shown;
+            for (int i = 0; i < 12; ++i) {
+                if (i > 0 && i % 4 == 0) shown += '-';
+                shown += i == codePos_ ? std::format("[{}]", codeDraft_[static_cast<std::size_t>(i)]) : std::string(1, codeDraft_[static_cast<std::size_t>(i)]);
+            }
+            return shown;
+        };
+        items.push_back(std::move(code));
+        MenuItem pos;
+        pos.label = "position";
+        pos.value = [this] { return std::to_string(codePos_ + 1); };
+        pos.adjust = [this](int d) { codePos_ = ((codePos_ + d) % 12 + 12) % 12; };
+        items.push_back(std::move(pos));
+        MenuItem ch;
+        ch.label = "character";
+        ch.value = [this] { return std::string(1, codeDraft_[static_cast<std::size_t>(codePos_)]); };
+        ch.adjust = [this](int d) {
+            char& c = codeDraft_[static_cast<std::size_t>(codePos_)];
+            const auto at = static_cast<int>(arcade::kCodeAlphabet.find(c));
+            const int n = static_cast<int>(arcade::kCodeAlphabet.size());
+            c = arcade::kCodeAlphabet[static_cast<std::size_t>(((std::max(0, at) + d) % n + n) % n)];
+        };
+        items.push_back(std::move(ch));
+        MenuItem result;
+        result.label = "result";
+        result.enabled = false;
+        result.separatorBefore = true;
+        result.value = [this] {
+            const auto r = arcade::checkDailyCode(codeDraft_);
+            return r ? std::format("valid: {} scored {}", r->date, r->score) : std::string("not a valid code");
+        };
+        items.push_back(std::move(result));
+        MenuItem note;
+        note.label = "codes catch typos, not cheats";
+        note.enabled = false;
+        items.push_back(std::move(note));
+        break;
+    }
+    case PageId::Progress: {
+        title = "progress";
+        auto& progress = host_.arcadeMachine().progress();
+        const auto& st = progress.stats();
+        const auto info = [&items](std::string label, std::string value, bool separator = false) {
+            MenuItem m;
+            m.label = std::move(label);
+            m.value = [value] { return value; };
+            m.enabled = false;
+            m.separatorBefore = separator;
+            items.push_back(std::move(m));
+        };
+        info("games played", std::to_string(st.matches));
+        info("needles placed", std::to_string(st.needles));
+        info("rounds cleared", std::to_string(st.roundsCleared));
+        info("close calls / fires / crowns", std::format("{} / {} / {}", st.closeCalls, st.fires, st.crowns));
+        info("best score / best round", std::format("{} / {}", st.bestScore, st.bestRound));
+        for (std::size_t i = 0; i < arcade::kAchievementCount; ++i) {
+            const auto a = static_cast<arcade::Achievement>(i);
+            const auto ai = arcade::achievementInfo(a);
+            info(std::string(ai.name), progress.earned(a) ? std::string("earned") : std::string(ai.blurb), i == 0);
+        }
+        addLookItems(items, false);
+        MenuItem reset = actionItem("reset progress", [this, &progress] {
+            if (confirm("reset progress")) {
+                progress.reset();
+                host_.saveProgress();
+                notice_ = "progress reset";
+                noticeTime_ = 3.0;
+                rebuildPending_ = true;
+            }
+        });
+        reset.value = [this] { return std::string(pendingConfirm_ == "reset progress" ? "press again to confirm" : ""); };
+        reset.separatorBefore = true;
+        items.push_back(std::move(reset));
         break;
     }
     }
@@ -445,6 +701,11 @@ std::optional<render::Vec2> ServiceMenu::rowPoint(int index) const {
 
 void ServiceMenu::back() {
     if (!open_) return;
+    if (playerMode_) {
+        close(true);
+        host_.playSound(audio::SoundId::MenuSelect);
+        return;
+    }
     if (capture_ != Capture::None) {
         host_.inputSystem().cancelCapture();
         capture_ = Capture::None;
@@ -490,6 +751,10 @@ void ServiceMenu::handleTap(float nx, float ny) {
 
 void ServiceMenu::update(const input::TickInput& in, double dt) {
     if (!open_) return;
+    if (rebuildPending_) {
+        rebuildPending_ = false;
+        build(pageId_);
+    }
     if (!in.taps.empty()) touchMode_ = true;
     for (const auto& [tx, ty] : in.taps) {
         handleTap(tx, ty);
@@ -542,6 +807,11 @@ void ServiceMenu::update(const input::TickInput& in, double dt) {
         return;
     }
 
+    if (playerMode_ && (pressed(input::Action::Service) || pressed(input::Action::MenuBack))) {
+        close(true);
+        host_.playSound(audio::SoundId::MenuSelect);
+        return;
+    }
     if (pressed(input::Action::Service)) {
         if (pageId_ != PageId::Main)
             show(PageId::Main);
@@ -676,6 +946,13 @@ void ServiceMenu::drawInputTest(render::Renderer2D& r, const render::ScreenLayou
         else r.ring(b, 34 * u, 2 * u, colors::kDim);
         r.text("fire", {a.x, a.y + 50 * u}, 14 * u, colors::kDim, Align::Center);
         r.text("start", {b.x, b.y + 50 * u}, 14 * u, colors::kDim, Align::Center);
+        // Left / right as two small arrows between the buttons.
+        const bool left = in.stationHeld(s, input::Action::Left), right = in.stationHeld(s, input::Action::Right);
+        const float ay = l.area.y + 236 * u;
+        const render::Vec2 la[] = {{cx - 8 * u, ay - 10 * u}, {cx - 22 * u, ay}, {cx - 8 * u, ay + 10 * u}};
+        const render::Vec2 ra[] = {{cx + 8 * u, ay - 10 * u}, {cx + 22 * u, ay}, {cx + 8 * u, ay + 10 * u}};
+        r.polyline(la, left ? 4 * u : 2 * u, left ? colors::kWhite : colors::kDim);
+        r.polyline(ra, right ? 4 * u : 2 * u, right ? colors::kWhite : colors::kDim);
         const input::InputDevice* d = in.devices().controllerForStation(s);
         r.text(d ? d->name : std::string("keyboard only"), {cx, l.area.y + 380 * u}, 12 * u, colors::kDim, Align::Center);
     }

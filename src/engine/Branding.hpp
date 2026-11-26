@@ -10,6 +10,7 @@ namespace spindle {
 inline constexpr std::string_view kTitle = "spindle";
 inline constexpr std::string_view kOrganization = "spindle";
 inline constexpr std::string_view kVersion = SPINDLE_VERSION_STRING;
+inline constexpr std::string_view kGitCommit = SPINDLE_GIT_COMMIT;
 inline constexpr std::string_view kTagline = "a four station needle battle";
 
 } // namespace spindle
