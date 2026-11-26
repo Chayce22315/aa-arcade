@@ -133,6 +133,13 @@ accident. A match pauses in the background and waits for a tap, so a phone call 
 Android is the one platform where SDL is linked dynamically. SDL's Java files are vendored at exactly
 the pinned SDL version; `SpindleActivity` only names the libraries and passes test arguments. Builds
 are 64-bit (arm64-v8a, x86_64): 32-bit Android was never compiled or tested, so it is not shipped.
+Android may destroy and re-create the activity for changes no app can opt out of (the emulator showed
+configuration bit `0x80000000`, the assets-path change made when a fresh install is indexed); SDL's
+default is to end the process, so `SpindleActivity` lets SDL run main again instead, and spindle keeps no
+state between runs of main.
+
+**On iOS the process ends when main returns.** SDL keeps UIKit's loop alive after main, which would
+leave a running app with nothing on screen after an operator shut-down or a finished self-test.
 
 **iOS targets 16.4.** Apple's C++ library marks floating-point `std::format` unavailable before iOS
 16.3, and spindle formats numbers everywhere; iOS 16 runs on every iPhone from the iPhone 8 on.
