@@ -10,6 +10,9 @@ project(spindle VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# No C++ modules here. Without this CMake 3.28+ scans every C++20 file for them, and with some
+# toolchains (CMake 4 + the Android NDK) it picks a mismatched clang-scan-deps and fails.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Static CRT everywhere (including SDL) so spindle.exe needs no redistributable.
