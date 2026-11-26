@@ -1,0 +1,5 @@
+// spindle for Android: the game itself is the same C++ as on Windows, built by ../CMakeLists.txt into
+// libmain.so; this project only packages it with SDL's Java glue. See docs/BUILDING.md.
+plugins {
+    id 'com.android.application' version '8.7.3' apply false
+}

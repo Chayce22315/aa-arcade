@@ -7,6 +7,7 @@
 #include "config/AtomicFile.hpp"
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
+#include "engine/Platform.hpp"
 #include "engine/SelfTest.hpp"
 #include "gameplay/Geometry.hpp"
 #include "menus/Screens.hpp"
@@ -48,7 +49,72 @@ void App::requestQuit(int code) {
 
 void App::updateLayout() {
     const auto [w, h] = display_.pixelSize();
-    layout_ = render::computeLayout(w, h);
+    // Keep the stations clear of notches and rounded corners (the safe area is in window points).
+    render::Rect safe{};
+    SDL_Rect area{};
+    int ww = 0, wh = 0;
+    if (display_.window() && SDL_GetWindowSafeArea(display_.window(), &area) && SDL_GetWindowSize(display_.window(), &ww, &wh) && ww > 0 && wh > 0) {
+        const float sx = static_cast<float>(w) / static_cast<float>(ww), sy = static_cast<float>(h) / static_cast<float>(wh);
+        if (area.w < ww || area.h < wh)
+            safe = {static_cast<float>(area.x) * sx, static_cast<float>(area.y) * sy, static_cast<float>(area.w) * sx, static_cast<float>(area.h) * sy};
+    }
+    layout_ = render::computeLayout(w, h, safe);
+}
+
+config::Settings App::defaultSettings() const { return platform::kMobile ? config::Settings::mobileDefaults() : config::Settings::defaults(); }
+
+bool App::touchUi() const { return platform::kMobile; }
+
+input::TouchContext App::touchContext() const {
+    input::TouchContext c;
+    if (!arcade_ || (service_ && service_->isOpen())) {
+        c.screen = input::TouchScreen::Ignore;
+        return c;
+    }
+    for (std::size_t i = 0; i < 4; ++i) c.columnEdges[i] = layout_.columns[i].x / layout_.width;
+    c.columnEdges[4] = (layout_.columns[3].x + layout_.columns[3].w) / layout_.width;
+    if (arcade_->state() == arcade::ArcadeState::Playing) {
+        c.screen = input::TouchScreen::Playing;
+        for (std::size_t i = 0; i < 4; ++i) c.humans[i] = arcade_->lineup().seats[i] == players::SeatKind::Human;
+    } else {
+        c.screen = input::TouchScreen::Lobby;
+    }
+    return c;
+}
+
+void App::handleLifecycle(const SDL_Event& e) {
+    switch (e.type) {
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+        log::info("app: going to the background");
+        if (arcade_) arcade_->suspend();
+        saveBookkeeping();
+        break;
+    case SDL_EVENT_DID_ENTER_FOREGROUND:
+        // The loop did not run while away: start the clock again from now instead of catching up.
+        simTimeNs_ = SDL_GetTicksNS();
+        log::info("app: back in the foreground");
+        break;
+    case SDL_EVENT_TERMINATING:
+        log::info("app: the system is terminating the app");
+        saveBookkeeping();
+        break;
+    case SDL_EVENT_LOW_MEMORY: log::warn("app: the system is low on memory"); break;
+    default: break;
+    }
+}
+
+void App::updateScreenSaver() {
+    if (!platform::kMobile || !arcade_) return;
+    // A phone may sleep while the cabinet idles in attract, never while people are playing.
+    const auto st = arcade_->state();
+    const int allow = (st == arcade::ArcadeState::Attract || st == arcade::ArcadeState::InsertCoin) ? 1 : 0;
+    if (allow == screenSaverAllowed_) return;
+    screenSaverAllowed_ = allow;
+    if (allow)
+        SDL_EnableScreenSaver();
+    else
+        SDL_DisableScreenSaver();
 }
 
 void App::pumpEvents() {
@@ -56,7 +122,8 @@ void App::pumpEvents() {
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_EVENT_QUIT:
-            if (settings_.arcade.exitHoldSeconds == 0 && !options_.selftest)
+            log::info("app: quit requested by the system");
+            if (settings_.arcade.exitHoldSeconds == 0 && !options_.selftest && !platform::kMobile)
                 log::info("app: quit request ignored (cabinet locked: exit_hold_seconds = 0)");
             else
                 requestQuit(0);
@@ -77,6 +144,25 @@ void App::pumpEvents() {
             updateLayout();
             break;
         }
+        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED: updateLayout(); break;
+        case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        case SDL_EVENT_DID_ENTER_BACKGROUND:
+        case SDL_EVENT_DID_ENTER_FOREGROUND:
+        case SDL_EVENT_TERMINATING:
+        case SDL_EVENT_LOW_MEMORY: handleLifecycle(e); break;
+        case SDL_EVENT_KEY_DOWN:
+            // Android's back button: leaves a service page, or the app when nobody is playing.
+            if (e.key.scancode == SDL_SCANCODE_AC_BACK && !e.key.repeat) {
+                if (service_ && service_->isOpen()) {
+                    service_->back();
+                } else if (arcade_ && arcade_->state() != arcade::ArcadeState::Playing) {
+                    log::info("app: back button, leaving");
+                    requestQuit(0);
+                }
+                break;
+            }
+            input_.handleEvent(e);
+            break;
         case SDL_EVENT_RENDER_TARGETS_RESET:
             log::warn("render: targets reset; geometry is rebuilt every frame so nothing to reload");
             updateLayout();
@@ -132,13 +218,14 @@ void App::tick(std::uint64_t tickEndNs) {
         service_->update(in, dt);
     } else {
         if (in.systemPressed[static_cast<std::size_t>(input::Action::Service)]) {
-            service_->open();
+            service_->open(in.serviceByTouch);
             audio_.play(audio::SoundId::MenuSelect);
         } else {
             arcade_->tick(in.arcade);
         }
     }
     handleArcadeEvents();
+    updateScreenSaver();
 
     exitHeld_ = input_.systemHeld(input::Action::Exit) ? exitHeld_ + dt : 0.0;
     if (settings_.arcade.exitHoldSeconds > 0 && exitHeld_ >= settings_.arcade.exitHoldSeconds) {
@@ -169,7 +256,7 @@ void App::render() {
     } else {
         const double sub = selftest_ ? 0.0 : static_cast<double>(now > simTimeNs_ ? now - simTimeNs_ : 0) / 1e9;
         menus::ScreenContext ctx{*renderer_, layout_, *arcade_, clockSeconds_, sub, exitHeld_, static_cast<double>(settings_.arcade.exitHoldSeconds),
-                                textures_.flame()};
+                                textures_.flame(), touchUi()};
         menus::drawArcade(ctx);
     }
     renderer_->end();
@@ -185,7 +272,7 @@ bool App::saveScreenshot(const std::filesystem::path& file) {
         service_->draw(*renderer_, layout_, clockSeconds_);
     } else {
         menus::ScreenContext ctx{*renderer_, layout_, *arcade_, clockSeconds_, 0.0, exitHeld_, static_cast<double>(settings_.arcade.exitHoldSeconds),
-                                textures_.flame()};
+                                textures_.flame(), touchUi()};
         menus::drawArcade(ctx);
     }
     renderer_->end();

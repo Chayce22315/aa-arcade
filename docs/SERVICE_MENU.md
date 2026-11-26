@@ -17,6 +17,19 @@ Any controller also navigates: D-pad to move and change, south button (A / cross
 button (B / circle) for back. Cabinets with only player buttons can use P1 start to move down and
 P1 fire to select / change.
 
+### On a phone or tablet
+
+There is no service key, so the menu hides behind a gesture: **hold one finger on the top-left corner
+of the screen for 3 seconds** (the corner is the top-left 7 % x 12 % of the screen; taps there never
+count as game input, so players cannot open it by accident). The menu then shows touch controls:
+
+- tap a row to choose it; tap the chosen row again to open it or run it;
+- on the chosen row, tap `<` (the left end of the value) or `>` (the right end) to change the value;
+- the **back** button at the top right (or Android's back button) returns to the main page; on the
+  main page it jumps to **save & exit**, which you then tap to save and close.
+
+The same gesture works on any touch screen, including a touch monitor on a Windows cabinet.
+
 ## Pages
 
 | Page | What it does |

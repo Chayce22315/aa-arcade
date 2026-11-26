@@ -15,7 +15,7 @@ Dependency rule: nothing in the core includes SDL. The platform turns SDL into p
 
 | Module | Library | Responsibility |
 |---|---|---|
-| `engine/` | core: `Log`; platform: the rest | `App` main loop, `Boot` (the 10 steps), `Paths` (portable folder or user folder), `SelfTest`, `Branding` (title, version), RAII SDL handles |
+| `engine/` | core: `Log`; platform: the rest | `App` main loop and phone lifecycle (background pause, back button, screen saver), `Boot` (the 10 steps), `Paths` (portable folder, user folder, or the app's data folder on phones), `Platform` (compile-time Android / iOS flags), `SelfTest`, `Branding` (title, version), RAII SDL handles |
 | `config/` | core | `IniDocument` (comment- and order-preserving INI), `AtomicFile` (temp + flush + rename), `Settings` (one schema drives loading, validation, saving and the default file) |
 | `assets/` | core: `EmbeddedAssets`, `Sha256`, `PngInfo`, `ControllerDbPin`; platform: `Downloader`, `ControllerDb` | resources compiled into the exe (scripts, sounds, the flame image); PNG header + CRC check; the one optional download (WinHTTP, https only, size-capped, pinned SHA-256) |
 | `collision/` | core | pure angular maths: wrap, separation threshold `2 asin(r/L)`, flight-time contact tests, sub-step count |
@@ -24,10 +24,14 @@ Dependency rule: nothing in the core includes SDL. The platform turns SDL into p
 | `players/` | core | `PlayerManager`: the mode rule and bot fill (stations keep their physical columns) |
 | `bots/` | core | `BotBrain` (sandboxed `bot.lua` per bot), `BotController` (delayed observation with its own copy of the needles per moment, since burns remove needles; fire presses only); `bot.lua` keeps a reachability map of the angles its aim passes so swinging circles never stall it, chases the fire meter and mashes while burning |
 | `arcade/` | core | `ArcadeMachine` (attract, insert coin, join, playing, game over), `Credits`, `Bookkeeping` |
-| `input/` | core: `Keybinds`; platform: `DeviceRegistry`, `InputSystem` | keyboards, gamepads and raw joysticks, hotplug, assignment, bindings, timestamped actions |
+| `input/` | core: `Keybinds`, `TouchZones`; platform: `DeviceRegistry`, `InputSystem` | keyboards, gamepads, raw joysticks and touch (columns as stations, the hidden service corner), hotplug, assignment, bindings, timestamped actions |
 | `audio/` | core: `Wav`, `SoundId`; platform: `AudioSystem` | WAV parsing; a fixed 16-voice mixer on one SDL audio stream |
 | `render/` | core: `StrokeFont`, `Layout`, `Geometry2D`; platform: `Renderer2D`, `Textures`, `DisplaySetup` | procedural drawing with 1-pixel alpha feathering plus textured quads (the flame) in the same batch, the four-column layout, window and display modes |
 | `menus/` | core: `MenuModel`; platform: `Screens`, `ServiceMenu` | every cabinet screen and the operator menu |
+
+Phone packaging lives outside `src/`: `android/` (Gradle project, SDL's Java glue, `SpindleActivity`,
+launcher icons) and `ios/` (Info.plist template, asset catalog). CMake builds `libmain.so` for Android
+and an app bundle for iOS from the same sources.
 
 ## The frame
 

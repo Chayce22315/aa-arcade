@@ -15,15 +15,31 @@
 #include "engine/App.hpp"
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
+#include "engine/Platform.hpp"
 #include "engine/SelfTest.hpp"
 
 namespace spindle {
 
 namespace {
 void step(int n, std::string_view what) { log::info("boot {}/10: {}", n, what); }
+
+// Phones: every log line also goes to the system log (logcat on Android, the device console on iOS).
+[[maybe_unused]] void systemLogSink(log::Level level, const char* line) {
+    const SDL_LogPriority p = level == log::Level::Error  ? SDL_LOG_PRIORITY_ERROR
+                              : level == log::Level::Warn ? SDL_LOG_PRIORITY_WARN
+                              : level == log::Level::Info ? SDL_LOG_PRIORITY_INFO
+                                                          : SDL_LOG_PRIORITY_DEBUG;
+    SDL_LogMessage(SDL_LOG_CATEGORY_APPLICATION, p, "%s", line);
+}
 } // namespace
 
 void App::fatal(const std::string& message) {
+    // On a phone the system can close the app while it is still starting (the activity is destroyed
+    // and re-created); that is not an error worth a dialog, the next start carries on.
+    if (platform::kMobile && (SDL_HasEvent(SDL_EVENT_TERMINATING) || SDL_HasEvent(SDL_EVENT_QUIT))) {
+        log::info("app: closed by the system while starting ({})", message);
+        return;
+    }
     log::error("fatal: {}", message);
     if (!options_.selftest) {
         const std::string title = std::format("{} cannot start", kTitle);
@@ -36,7 +52,7 @@ void App::loadSettingsFile() {
     std::vector<config::IniIssue> syntax;
     settingsDoc_ = config::IniDocument::parse(text.value_or(""), &syntax);
     for (const auto& i : syntax) log::warn("settings: line {}: {} ({})", i.line, i.message, i.text);
-    config::LoadedSettings loaded = config::loadSettings(settingsDoc_);
+    config::LoadedSettings loaded = config::loadSettings(settingsDoc_, defaultSettings());
     for (const auto& i : loaded.issues) {
         if (i.kind == config::IssueKind::Invalid)
             log::warn("settings: [{}] {} = '{}': {}", i.section, i.key, i.value, i.message);
@@ -48,6 +64,12 @@ void App::loadSettingsFile() {
 }
 
 bool App::bootCheck() {
+    if constexpr (platform::kMobile) {
+        log::setEchoToStderr(false);
+        log::setSink(&systemLogSink);
+        SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight"); // the four stations need the wide side
+        SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");                // App::pumpEvents decides what back does
+    }
     step(1, "checking required files and dependencies");
     paths_ = resolvePaths(options_.root);
     log::open(paths_.logFile());
@@ -56,7 +78,7 @@ bool App::bootCheck() {
     // settings.ini: required; written with commented defaults when missing.
     if (!std::filesystem::exists(paths_.settings())) {
         std::string err;
-        if (config::writeFileAtomic(paths_.settings(), config::defaultSettingsText(), &err))
+        if (config::writeFileAtomic(paths_.settings(), config::defaultSettingsText(defaultSettings()), &err))
             log::info("settings: created {} with defaults", pathToUtf8(paths_.settings()));
         else
             log::error("settings: cannot create {}: {}", pathToUtf8(paths_.settings()), err);
@@ -165,6 +187,11 @@ bool App::bootDisplay() {
                                                                                             : "windowed"));
     config::Settings::Display wanted = settings_.display;
     if (options_.forceWindowed) wanted.fullscreen = config::FullscreenMode::Windowed;
+    if constexpr (platform::kMobile) {
+        // A phone has one mode: the whole screen at its own resolution.
+        wanted.fullscreen = config::FullscreenMode::Borderless;
+        wanted.resolution = config::Resolution{};
+    }
     step(7, "setting the window");
     if (!display_.create(wanted, &err)) {
         fatal(err);
@@ -194,6 +221,7 @@ bool App::bootArcade() {
         settings_, *levels_, [this](config::Difficulty d, std::uint64_t seed) { return makeBot(d, seed); }, std::move(bk), entropy);
     service_ = std::make_unique<menus::ServiceMenu>(*this);
 
+    input_.setTouchContext([this] { return touchContext(); });
     input_.setClaimPolicy([this]() -> int {
         // A station waiting for its lost controller first; otherwise the lowest station nobody holds.
         for (int s = 0; s < 4; ++s)

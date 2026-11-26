@@ -47,7 +47,8 @@ std::string formatDuration(std::uint64_t seconds) {
 
 ServiceMenu::ServiceMenu(ServiceHost& host) : host_(host) {}
 
-void ServiceMenu::open() {
+void ServiceMenu::open(bool byTouch) {
+    touchMode_ = host_.touchUi() || byTouch;
     edit_ = host_.currentSettings();
     open_ = true;
     capture_ = Capture::None;
@@ -167,7 +168,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(pageItem("bookkeeping", PageId::Bookkeeping));
         MenuItem reset = actionItem("reset defaults", [this] {
             if (confirm("reset")) {
-                edit_ = config::Settings::defaults();
+                edit_ = host_.defaultSettings();
                 notice_ = "defaults loaded - save & exit to keep them";
                 noticeTime_ = 4.0;
             }
@@ -436,8 +437,64 @@ void ServiceMenu::build(PageId id) {
 
 // ------------------------------------------------------------------ input
 
+std::optional<render::Vec2> ServiceMenu::rowPoint(int index) const {
+    for (const RowHit& row : rowHits_)
+        if (row.index == index) return render::Vec2{lastLayout_.area.x + lastLayout_.area.w * 0.3f, (row.y0 + row.y1) * 0.5f};
+    return std::nullopt;
+}
+
+void ServiceMenu::back() {
+    if (!open_) return;
+    if (capture_ != Capture::None) {
+        host_.inputSystem().cancelCapture();
+        capture_ = Capture::None;
+        return;
+    }
+    if (pageId_ != PageId::Main) {
+        show(PageId::Main);
+    } else {
+        for (std::size_t i = 0; i < page_.items().size(); ++i)
+            if (page_.items()[i].label == "save & exit") page_.select(static_cast<int>(i));
+    }
+    host_.playSound(audio::SoundId::MenuMove);
+}
+
+void ServiceMenu::handleTap(float nx, float ny) {
+    const float x = nx * lastLayout_.width, y = ny * lastLayout_.height;
+    const auto inside = [&](const render::Rect& r) { return r.w > 0.0f && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; };
+    if (inside(backButton_)) {
+        back();
+        return;
+    }
+    if (capture_ != Capture::None || pageId_ == PageId::InputTest || pageId_ == PageId::DisplayTest) return;
+    for (const RowHit& row : rowHits_) {
+        if (y < row.y0 || y > row.y1) continue;
+        const auto& item = page_.items()[static_cast<std::size_t>(row.index)];
+        if (!item.enabled) return;
+        if (row.index != page_.selected()) {
+            page_.select(row.index);
+            host_.playSound(audio::SoundId::MenuMove);
+            return;
+        }
+        // Tapping the selected row: the value end changes it (left half down, right half up), the
+        // label end opens or runs it.
+        if (item.adjust && (x >= valueZoneX_ || !item.activate)) {
+            const int dir = x >= valueZoneX_ && x < (valueZoneX_ + valueZoneEnd_) * 0.5f ? -1 : 1;
+            if (page_.adjust(dir)) host_.playSound(audio::SoundId::MenuMove);
+        } else if (page_.activate()) {
+            host_.playSound(audio::SoundId::MenuSelect);
+        }
+        return;
+    }
+}
+
 void ServiceMenu::update(const input::TickInput& in, double dt) {
     if (!open_) return;
+    if (!in.taps.empty()) touchMode_ = true;
+    for (const auto& [tx, ty] : in.taps) {
+        handleTap(tx, ty);
+        if (!open_) return;
+    }
     noticeTime_ = std::max(0.0, noticeTime_ - dt);
     confirmTime_ = std::max(0.0, confirmTime_ - dt);
     if (confirmTime_ <= 0.0) pendingConfirm_.clear();
@@ -530,9 +587,22 @@ void ServiceMenu::draw(render::Renderer2D& r, const render::ScreenLayout& l, dou
     const float u = l.uiScale;
     const float x0 = l.area.x + 80 * u;
     const float x1 = l.area.x + l.area.w - 80 * u;
+    lastLayout_ = l;
+    rowHits_.clear();
+    backButton_ = {};
+    valueZoneX_ = x1 - (x1 - x0) * 0.4f;
+    valueZoneEnd_ = x1 + 60 * u;
+    const bool touch = touchMode_;
     r.fillRect({0, 0, l.width, l.height}, colors::kBlack);
     r.text(std::format("{} {}", kTitle, kVersion), {x0, l.area.y + 40 * u}, 16 * u, colors::kDim);
     r.text(page_.title(), {x0, l.area.y + 80 * u}, 34 * u, colors::kWhite);
+    if (touch) {
+        backButton_ = {x1 - 150 * u, l.area.y + 66 * u, 170 * u, 64 * u};
+        r.ring({backButton_.x + 32 * u, backButton_.y + 32 * u}, 22 * u, 2.0f * u, colors::kWhite);
+        r.line({backButton_.x + 40 * u, backButton_.y + 22 * u}, {backButton_.x + 28 * u, backButton_.y + 32 * u}, 2.4f * u, colors::kWhite);
+        r.line({backButton_.x + 28 * u, backButton_.y + 32 * u}, {backButton_.x + 40 * u, backButton_.y + 42 * u}, 2.4f * u, colors::kWhite);
+        r.text("back", {backButton_.x + 66 * u, backButton_.y + 20 * u}, 22 * u, colors::kWhite);
+    }
 
     if (pageId_ == PageId::InputTest) {
         drawInputTest(r, l, time);
@@ -553,6 +623,12 @@ void ServiceMenu::draw(render::Renderer2D& r, const render::ScreenLayout& l, dou
             if (sel) r.fillRect({x0 - 16 * u, y - 10 * u, x1 - x0 + 32 * u, rowH - 4 * u}, colors::kWhite);
             r.text(it.label, {x0, y}, 18 * u, col);
             if (it.value) r.text(it.value(), {x1, y}, 18 * u, sel ? colors::kBlack : colors::kDim, Align::Right);
+            if (touch && sel && it.adjust) {
+                // Touch: the value end of the selected row is a  -  /  +  pair.
+                r.text("<", {valueZoneX_, y}, 18 * u, colors::kBlack);
+                r.text(">", {x1 + 22 * u, y}, 18 * u, colors::kWhite);
+            }
+            rowHits_.push_back({y - 10 * u, y - 10 * u + rowH, i});
             y += rowH;
         }
     }
@@ -569,7 +645,10 @@ void ServiceMenu::draw(render::Renderer2D& r, const render::ScreenLayout& l, dou
     } else if (noticeTime_ > 0.0) {
         r.text(notice_, {x0, fy - 40 * u}, 18 * u, colors::kWhite);
     }
-    const std::string help = (pageId_ == PageId::InputTest)    ? "hold back for 1 second or press service to return"
+    const std::string help = touch ? (pageId_ == PageId::InputTest || pageId_ == PageId::DisplayTest
+                                          ? "tap back to return"
+                                          : "tap a row to choose it, tap it again to open or change it   tap < or > to change a value   back returns")
+                             : (pageId_ == PageId::InputTest)   ? "hold back for 1 second or press service to return"
                              : (pageId_ == PageId::DisplayTest) ? "back or service to return"
                                                                 : "up / down move   left / right change   select confirm   back return   service save & exit";
     r.text(help, {x0, fy}, 13 * u, colors::kDim);

@@ -84,3 +84,21 @@ TEST_CASE(settings_powerup_types_validated_and_normalised) {
     CHECK(!none.settings.gameplay.powerups);
     CHECK_EQ(none.settings.gameplay.powerupTypes, std::string("none"));
 }
+
+TEST_CASE(settings_real_numbers_are_plain_decimals_in_any_locale) {
+    const auto scale = [](const char* text) {
+        auto loaded = loadSettings(IniDocument::parse(std::string("[Gameplay]\nrotation_speed_scale = ") + text + "\n"));
+        return std::pair<double, std::size_t>{loaded.settings.gameplay.rotationSpeedScale, loaded.invalidCount()};
+    };
+    CHECK_NEAR(scale("1.25").first, 1.25, 1e-12);
+    CHECK_NEAR(scale(" +1.5 ").first, 1.5, 1e-12);
+    CHECK_NEAR(scale(".5").first, 0.5, 1e-12);
+    CHECK_NEAR(scale("2.").first, 2.0, 1e-12);
+    CHECK_NEAR(scale("15e-1").first, 1.5, 1e-12);
+    CHECK_EQ(scale("1.25").second, std::size_t{0});
+    for (const char* bad : {"1,5", "inf", "nan", "0x1p0", "-", ".", "1.2.3", "1e", "1.5x", "e5"}) {
+        const auto [value, invalid] = scale(bad);
+        CHECK_NEAR(value, 1.0, 1e-12); // the default
+        CHECK_EQ(invalid, std::size_t{1});
+    }
+}

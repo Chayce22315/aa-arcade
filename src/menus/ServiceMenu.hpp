@@ -20,6 +20,8 @@ class ServiceHost {
 public:
     virtual ~ServiceHost() = default;
     virtual const config::Settings& currentSettings() const = 0;
+    virtual config::Settings defaultSettings() const = 0; // what "reset defaults" restores on this platform
+    virtual bool touchUi() const = 0;                      // phones and tablets: show touch controls
     virtual void commitSettings(const config::Settings& settings) = 0; // apply everywhere and save settings.ini
     virtual void previewDisplay(const config::Settings::Display& display) = 0;
     virtual void previewVolumes(const config::Settings::Audio& audio) = 0;
@@ -41,15 +43,23 @@ class ServiceMenu {
 public:
     explicit ServiceMenu(ServiceHost& host);
 
-    void open();
+    // byTouch: opened from the hidden corner, so show the touch controls even on a cabinet.
+    void open(bool byTouch = false);
     bool isOpen() const { return open_; }
     void update(const input::TickInput& in, double dt);
+    // Same as the back key: leaves a sub page; on the main page moves to "save & exit".
+    void back();
     void draw(render::Renderer2D& r, const render::ScreenLayout& layout, double time);
 
     // Introspection for the self-test.
     std::string pageTitle() const { return page_.title(); }
     std::string selectedLabel() const;
     const config::Settings& edited() const { return edit_; }
+    int selectedIndex() const { return page_.selected(); }
+    bool touchMode() const { return touchMode_; }
+    const render::Rect& backButton() const { return backButton_; }
+    // Centre of a row as last drawn (screen pixels), if it is on screen.
+    std::optional<render::Vec2> rowPoint(int index) const;
 
 private:
     enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Bookkeeping };
@@ -59,6 +69,7 @@ private:
     void build(PageId id);
     void close(bool save);
     bool confirm(const std::string& key);
+    void handleTap(float nx, float ny);
     void drawInputTest(render::Renderer2D& r, const render::ScreenLayout& l, double time);
     void drawDisplayTest(render::Renderer2D& r, const render::ScreenLayout& l, double time);
 
@@ -70,6 +81,18 @@ private:
     MenuItem keyItem(std::string label, std::string& binding);
 
     ServiceHost& host_;
+    // Touch: where the last frame drew its rows and the back button (screen pixels).
+    struct RowHit {
+        float y0 = 0.0f;
+        float y1 = 0.0f;
+        int index = 0;
+    };
+    std::vector<RowHit> rowHits_;
+    render::Rect backButton_{};
+    float valueZoneX_ = 0.0f;
+    float valueZoneEnd_ = 0.0f;
+    render::ScreenLayout lastLayout_{};
+    bool touchMode_ = false;
     config::Settings edit_;
     MenuPage page_;
     PageId pageId_ = PageId::Main;

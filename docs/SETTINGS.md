@@ -17,6 +17,9 @@ and a comment describing the valid values.
   (temporary file, flush, rename), so a power cut cannot leave a half-written file.
 - `true/false`, `yes/no`, `on/off` are accepted wherever `0 | 1` is shown. `fullscreen = 1` / `0` are
   accepted as `borderless` / `windowed`.
+- **Phones and tablets** write the same file into the app's private data folder, with one different
+  default: `free_play = 1` (a phone has no coin slot). The display settings are ignored there: the game
+  always fills the screen in landscape.
 - `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend`, `heat`, `purge`, `swift` (or `none`); it is stored in
   that canonical order. An unknown name makes the whole value invalid (default used).
 

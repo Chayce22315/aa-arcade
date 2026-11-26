@@ -16,6 +16,7 @@
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
 #include "engine/Paths.hpp"
+#include "engine/Platform.hpp"
 #include "gameplay/Geometry.hpp"
 #include "gameplay/LevelScript.hpp"
 
@@ -106,6 +107,13 @@ int main(int argc, char** argv) {
     const std::string title(spindle::kTitle), version(spindle::kVersion);
     SDL_SetAppMetadata(title.c_str(), version.c_str(), "spindle.arcade");
     spindle::log::setEchoToStderr(true);
-    spindle::App app(std::move(options));
-    return app.run();
+    int code = 0;
+    {
+        spindle::App app(std::move(options));
+        code = app.run();
+    }
+    // On iOS returning from main leaves the process running with nothing on screen (SDL keeps UIKit's
+    // loop alive); when spindle is done (self-test finished, operator shut down) it really ends.
+    if constexpr (spindle::platform::kIos) std::exit(code);
+    return code;
 }

@@ -63,6 +63,9 @@ private:
     void screenshot(const std::string& name);
 
     void tapKey(SDL_Scancode sc);
+    // A finger touching (x, y) (normalized window position) and lifting on the next tick.
+    void tapScreen(float x, float y);
+    void fingerEvent(Uint32 type, SDL_FingerID id, float x, float y);
     void pressFire(int station);
     void pressStart(int station);
     void setButton(Controller& c, int button, bool down);
@@ -80,11 +83,12 @@ private:
     double stepTime_ = 0.0;
     int tick_ = 0;
     std::string failures_;
+    SDL_FingerID nextFinger_ = 1;
+    int touchNeedles_ = 0;
     std::array<Controller, 4> ctl_{};
     std::vector<std::pair<int, std::function<void()>>> releases_;
     std::vector<std::string> shots_;
     std::uint64_t frozenTick_ = 0;
-    double waitStart_ = 0.0;
     bool done_ = false;
 };
 

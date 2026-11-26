@@ -19,6 +19,10 @@ void close();
 void setLevel(Level level);
 Level level();
 void setEchoToStderr(bool echo);
+// Optional extra destination for every line (phones: the system log, i.e. logcat / the Xcode console,
+// since stderr goes nowhere there). Called with the log lock held; must not log itself.
+using Sink = void (*)(Level level, const char* line);
+void setSink(Sink sink);
 
 void write(Level level, std::string_view message);
 

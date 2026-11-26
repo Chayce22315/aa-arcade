@@ -134,9 +134,22 @@ when empty and fills with colour from the bottom as the combo grows.
 The game-over screen ranks players: winner first, then by the round they were eliminated in (later is
 better), then by the tick they failed on (later is better), then by needles placed over the match.
 
+## Touch (phones and tablets)
+
+On a phone or tablet the screen is the cabinet: the four stations are its four columns.
+
+- **Joining:** tap a column to join at that station (phones default to free play, so no coin is
+  needed); tap your column again to start straight away, or wait for the join timer.
+- **One player** (usually a phone against bots): tap anywhere to fire.
+- **Several players** (around a tablet): each player taps their own column; taps on a bot's column do
+  nothing. Every finger counts on its own, so players can tap at the same time.
+- **Leaving the app** (home button, a call) pauses a running match; it shows `paused` and continues when
+  a player taps (that tap does not launch a needle). Rules, timers and tie-breaks are unchanged.
+- The top-left corner is reserved for the operator gesture (see docs/SERVICE_MENU.md).
+
 ## Timing and input
 
 The simulation runs at a fixed 240 Hz. Every input event carries SDL's nanosecond timestamp and is
 applied on the tick in which it happened, not on the frame in which it was read, so frame rate never
-changes when a needle is launched. Speeds and timings are uncalibrated starting values and are meant
+changes when a needle is launched. Touches are timestamped the same way. Speeds and timings are uncalibrated starting values and are meant
 to be tuned by feel (`[Gameplay]` scales, `data/scripts/levels.lua`).

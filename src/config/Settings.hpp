@@ -127,6 +127,8 @@ struct Settings {
     } system;
 
     static Settings defaults();
+    // Defaults for phones and tablets: free play (there is no coin slot), the rest as on a cabinet.
+    static Settings mobileDefaults();
     bool operator==(const Settings&) const = default;
 };
 
@@ -148,13 +150,14 @@ struct LoadedSettings {
 
 // Reads every schema key from the document; anything missing, unparsable or out of range keeps its
 // default and is reported. Never modifies the document.
-LoadedSettings loadSettings(const IniDocument& doc);
+// base supplies the defaults (Settings::defaults() on a cabinet, mobileDefaults() on a phone).
+LoadedSettings loadSettings(const IniDocument& doc, const Settings& base = Settings::defaults());
 
 // Writes all values into the document, keeping existing comments and order.
 void storeSettings(const Settings& settings, IniDocument& doc);
 
 // A complete, commented settings.ini with default values.
-std::string defaultSettingsText();
+std::string defaultSettingsText(const Settings& base = Settings::defaults());
 
 std::string_view difficultyName(Difficulty d);
 std::optional<Difficulty> parseDifficulty(std::string_view s);

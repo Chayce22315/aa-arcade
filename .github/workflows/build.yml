@@ -81,3 +81,150 @@ jobs:
         run: |
           python3 tools/gen_sfx.py --check
           python3 tools/gen_art.py --check
+
+  android:
+    name: Android (APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/wrapper-validation@v4
+      - name: Pick the NDK and CMake (stable releases the runner already has)
+        run: |
+          ls "$ANDROID_HOME/ndk" "$ANDROID_HOME/cmake"
+          # Prefer the NDK the project names, then the newest r28/r27; CMake: the newest 3.x (>= 3.25).
+          NDK=$(ls "$ANDROID_HOME/ndk" | grep -x '28.2.13676358' || ls "$ANDROID_HOME/ndk" | grep -E '^2[78]\.' | sort -V | tail -1)
+          [ -n "$NDK" ] || NDK=$(ls "$ANDROID_HOME/ndk" | sort -V | tail -1)
+          CMAKE=$(ls "$ANDROID_HOME/cmake" | grep -E '^3\.(2[5-9]|3[0-9])\.' | sort -V | tail -1)
+          [ -n "$CMAKE" ] || CMAKE=$(ls "$ANDROID_HOME/cmake" | sort -V | tail -1)
+          echo "NDK $NDK, CMake $CMAKE"
+          echo "SPINDLE_NDK=$NDK" >> "$GITHUB_ENV"
+          echo "SPINDLE_CMAKE=$CMAKE" >> "$GITHUB_ENV"
+      - name: Build the release APK (arm64 + x86_64)
+        working-directory: android
+        run: ./gradlew --no-daemon assembleRelease -Pspindle.ndkVersion="$SPINDLE_NDK" -Pspindle.cmakeVersion="$SPINDLE_CMAKE"
+      - name: Build the debug APK for the emulator (x86_64)
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug -Pspindle.ndkVersion="$SPINDLE_NDK" -Pspindle.cmakeVersion="$SPINDLE_CMAKE" -Pspindle.abis=x86_64
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk dist/spindle-android.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/spindle-android-debug-x86_64.apk
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spindle-android
+          path: dist/spindle-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spindle-android-debug-x86_64
+          path: dist/spindle-android-debug-x86_64.apk
+
+  android-selftest:
+    name: Android self-test (emulator)
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: spindle-android-debug-x86_64
+          path: dist
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run the four-station self-test on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash ci/android_selftest.sh dist/spindle-android-debug-x86_64.apk selftest-android
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest-android
+          path: selftest-android
+          if-no-files-found: ignore
+
+  ios:
+    name: iOS (device .ipa, simulator build + self-test)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Xcode, iOS simulator)
+        run: >
+          cmake -S . -B build/ios -G Xcode
+          -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator
+          -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.4
+      - name: Build
+        run: |
+          # xcodebuild is very chatty: keep the full log as an artifact and show only the problems here.
+          if ! cmake --build build/ios --config Release -- -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO > ios-build.log 2>&1; then
+            grep -E -A8 "(error|fatal error):|libtool:|ld: " ios-build.log | head -n 300
+            grep -E -A25 "^Libtool .*libspindle_core" ios-build.log | grep -v -E "^ +(cd|export|/Applications.*clang)" | head -n 60
+            grep -E -A20 "The following build commands failed" ios-build.log | head -n 40
+            exit 1
+          fi
+          grep -c "warning:" ios-build.log || true
+          tail -n 3 ios-build.log
+      - name: Build for iPhone and iPad (arm64, unsigned)
+        run: |
+          if ! cmake --build build/ios --config Release -- -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > ios-device-build.log 2>&1; then
+            grep -E -A8 "(error|fatal error):|ld: " ios-device-build.log | head -n 200
+            grep -E -A20 "The following build commands failed" ios-device-build.log | head -n 40
+            exit 1
+          fi
+          tail -n 3 ios-device-build.log
+      - name: Package the unsigned .ipa
+        run: |
+          rm -rf ipa && mkdir -p ipa/Payload
+          cp -R build/ios/Release-iphoneos/spindle.app ipa/Payload/
+          (cd ipa && zip -qry ../spindle-ios-unsigned.ipa Payload)
+          ls -la spindle-ios-unsigned.ipa
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" -c "Print :MinimumOSVersion" ipa/Payload/spindle.app/Info.plist
+          lipo -info ipa/Payload/spindle.app/spindle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spindle-ios-unsigned-ipa
+          path: spindle-ios-unsigned.ipa
+      - name: Run the four-station self-test in the iOS simulator
+        timeout-minutes: 25
+        run: python3 ci/ios_selftest.py build/ios/Release-iphonesimulator/spindle.app selftest-ios
+      - name: Package the simulator app
+        if: always()
+        run: |
+          if [ -d build/ios/Release-iphonesimulator/spindle.app ]; then
+            (cd build/ios/Release-iphonesimulator && zip -qry ../../../spindle-ios-simulator.zip spindle.app)
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spindle-ios-simulator
+          path: spindle-ios-simulator.zip
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-build-log
+          path: |
+            ios-build.log
+            ios-device-build.log
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest-ios
+          path: selftest-ios
+          if-no-files-found: ignore
