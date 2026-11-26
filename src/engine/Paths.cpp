@@ -6,6 +6,7 @@
 
 #include "config/AtomicFile.hpp"
 #include "engine/Branding.hpp"
+#include "engine/Platform.hpp"
 
 namespace spindle {
 
@@ -32,7 +33,8 @@ Paths resolvePaths(const std::optional<std::filesystem::path>& root) {
     }
     p.base = pathFromUtf8(SDL_GetBasePath());
     if (p.base.empty()) p.base = std::filesystem::current_path();
-    if (config::isDirectoryWritable(p.base)) {
+    // Phones keep the app read-only; its files live in the app's private data folder.
+    if (!platform::kMobile && config::isDirectoryWritable(p.base)) {
         p.writable = p.base;
         p.portable = true;
         return p;

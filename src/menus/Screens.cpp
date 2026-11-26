@@ -32,6 +32,12 @@ void textAt(const ScreenContext& c, std::string_view s, float x, float y, float 
 float midX(const ScreenContext& c) { return c.layout.area.x + c.layout.area.w * 0.5f; }
 float areaY(const ScreenContext& c, float ref) { return c.layout.area.y + px(c, ref); }
 
+// The blinking call to play: coins on a cabinet, a tap on a phone.
+const char* startPrompt(const ScreenContext& c) {
+    if (!c.arcade.credits().canJoin()) return "INSERT COIN";
+    return c.touchUi ? "TAP TO START" : "PRESS START";
+}
+
 void creditLine(const ScreenContext& c) {
     const auto& credits = c.arcade.credits();
     const std::string s = credits.freePlay() ? std::string("FREE PLAY") : std::format("CREDIT {}", credits.credits());
@@ -383,7 +389,7 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
     if (demo) {
         textAt(c, "demo", midX(c), areaY(c, 22), 14, colors::kDim);
         if (blink(c.time))
-            textAt(c, c.arcade.credits().canJoin() ? "PRESS START" : "INSERT COIN", midX(c), areaY(c, 600), 40, colors::kWhite);
+            textAt(c, startPrompt(c), midX(c), areaY(c, 600), 40, colors::kWhite);
     }
 }
 
@@ -408,14 +414,14 @@ void drawTitle(const ScreenContext& c) {
     const std::string title(kTitle);
     textAt(c, title, cx, areaY(c, 170), 120, colors::kWhite);
     textAt(c, kTagline, cx, areaY(c, 340), 22, colors::kDim);
-    if (blink(c.time)) textAt(c, c.arcade.credits().canJoin() ? "PRESS START" : "INSERT COIN", cx, areaY(c, 900), 40, colors::kWhite);
+    if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 900), 40, colors::kWhite);
 }
 
 void drawHowTo(const ScreenContext& c) {
     const float cx = midX(c);
     textAt(c, "how to play", cx, areaY(c, 120), 40, colors::kWhite);
-    const char* lines[] = {
-        "press fire to launch a needle into your circle",
+    const char* const lines[] = {
+        c.touchUi ? "tap your side of the screen to launch a needle" : "press fire to launch a needle into your circle",
         "needles must never touch each other",
         "every round all players get the same circle",
         "clear the round to keep your tries",
@@ -462,7 +468,7 @@ void drawHowTo(const ScreenContext& c) {
     decorativeCircle(c, centre, scale, c.time * 0.6);
     const float dist = static_cast<float>(300.0 - std::min(phase, 1.0) * 150.0) * scale;
     if (phase < 1.0) c.r.fillCircle({centre.x, centre.y + px(c, dist)}, px(c, 11) * scale, colors::kWhite);
-    if (blink(c.time)) textAt(c, c.arcade.credits().canJoin() ? "PRESS START" : "INSERT COIN", cx, areaY(c, 990), 30, colors::kWhite);
+    if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 990), 30, colors::kWhite);
 }
 
 void drawWinners(const ScreenContext& c) {
@@ -475,7 +481,7 @@ void drawWinners(const ScreenContext& c) {
                colors::kWhite);
         y += 80;
     }
-    if (blink(c.time)) textAt(c, c.arcade.credits().canJoin() ? "PRESS START" : "INSERT COIN", cx, areaY(c, 900), 40, colors::kWhite);
+    if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 900), 40, colors::kWhite);
 }
 
 void drawInsertCoin(const ScreenContext& c) {
@@ -484,7 +490,7 @@ void drawInsertCoin(const ScreenContext& c) {
     textAt(c, credits.freePlay() ? std::string("FREE PLAY") : std::format("CREDIT {}", credits.credits()), cx, areaY(c, 300), 80,
            colors::kWhite);
     if (credits.canJoin()) {
-        if (blink(c.time)) textAt(c, "PRESS START", cx, areaY(c, 520), 44, colors::kWhite);
+        if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 520), 44, colors::kWhite);
         if (!credits.freePlay())
             textAt(c, std::format("{} credit{} per player", credits.config().creditsPerGame, credits.config().creditsPerGame > 1 ? "s" : ""),
                    cx, areaY(c, 620), 20, colors::kDim);
@@ -504,14 +510,14 @@ void drawJoin(const ScreenContext& c) {
         if (joined[i]) {
             decorativeCircle(c, centre, 0.8f, c.time * 0.8 + s);
             textAt(c, "joined", x, col.y + px(c, 700), 30, colors::kWhite);
-            if (blink(c.time, 1.4)) textAt(c, "start = go", x, col.y + px(c, 760), 16, colors::kDim);
+            if (blink(c.time, 1.4)) textAt(c, c.touchUi ? "tap again = go" : "start = go", x, col.y + px(c, 760), 16, colors::kDim);
         } else {
             c.r.ring(centre, px(c, 46), px(c, 2), colors::kDim);
             const bool needCoin = c.arcade.needCoinFlash(s) > 0.0;
             if (needCoin)
                 textAt(c, "INSERT COIN", x, col.y + px(c, 700), 26, Color{1.0f, 0.5f, 0.5f, 1.0f});
             else if (blink(c.time))
-                textAt(c, "PRESS START", x, col.y + px(c, 700), 26, colors::kWhite);
+                textAt(c, c.touchUi ? "TAP TO JOIN" : "PRESS START", x, col.y + px(c, 700), 26, colors::kWhite);
         }
     }
     const int left = static_cast<int>(std::ceil(c.arcade.joinTimeLeft()));
@@ -547,6 +553,12 @@ void drawGameOver(const ScreenContext& c) {
         ++rank;
         y += 56;
     }
+}
+
+void drawSuspendedOverlay(const ScreenContext& c) {
+    c.r.fillRect({0, 0, c.layout.width, c.layout.height}, colors::kBlack.withAlpha(0.72f));
+    textAt(c, "paused", midX(c), areaY(c, 430), 60, colors::kWhite);
+    if (blink(c.time)) textAt(c, c.touchUi ? "tap to continue" : "press start or fire to continue", midX(c), areaY(c, 540), 26, colors::kWhite);
 }
 
 void drawDisconnectOverlay(const ScreenContext& c) {
@@ -587,7 +599,10 @@ void drawArcade(const ScreenContext& c) {
     case arcade::ArcadeState::Playing:
         dividers(c);
         if (const gameplay::Match* m = a.match()) drawMatch(c, *m, false);
-        if (a.pausedForDisconnect()) drawDisconnectOverlay(c);
+        if (a.pausedForDisconnect())
+            drawDisconnectOverlay(c);
+        else if (a.suspended())
+            drawSuspendedOverlay(c);
         break;
     case arcade::ArcadeState::GameOver: drawGameOver(c); break;
     }

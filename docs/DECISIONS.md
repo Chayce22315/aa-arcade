@@ -120,3 +120,24 @@ own aim (timing error included) actually passes, aims for the best of those, siz
 from its own skill, and with patience settles for any spot it can make. A regression test replays
 the swing rounds with the seeds that used to stall.
 
+**Phones and tablets are the same game, not a port.** Android and iOS build the same core and
+platform layer; only a thin mobile layer differs: a pure touch mapper (`input/TouchZones`), lifecycle
+handling, the safe area, the system log, and `engine/Platform.hpp` for the few compile-time branches.
+Touch maps to the existing actions (start, fire, service), so the arcade machine, rules and bots never
+learn that a phone exists. The four stations stay four columns: a tablet seats four players, a phone
+plays one human against bots (tap anywhere). Free play is the phone default because there is no coin
+slot; the operator menu hides behind a 3-second hold on the top-left corner, which nobody hits by
+accident. A match pauses in the background and waits for a tap, so a phone call never costs a try.
+
+**Android loads SDL as its own library.** SDL's Java side expects `libSDL3.so` next to `libmain.so`, so
+Android is the one platform where SDL is linked dynamically. SDL's Java files are vendored at exactly
+the pinned SDL version; `SpindleActivity` only names the libraries and passes test arguments. Builds
+are 64-bit (arm64-v8a, x86_64): 32-bit Android was never compiled or tested, so it is not shipped.
+
+**iOS targets 16.4.** Apple's C++ library marks floating-point `std::format` unavailable before iOS
+16.3, and spindle formats numbers everywhere; iOS 16 runs on every iPhone from the iPhone 8 on.
+
+**Phone builds are checked in CI, in emulators.** The Android APK runs the full self-test on an
+emulator and the iOS app in a simulator, on every push. Real devices (touch feel, notches, audio
+latency, performance) still have to be checked by hand.
+

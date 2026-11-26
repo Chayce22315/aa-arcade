@@ -15,6 +15,7 @@
 #include "config/Settings.hpp"
 #include "input/DeviceRegistry.hpp"
 #include "input/Keybinds.hpp"
+#include "input/TouchZones.hpp"
 
 namespace spindle::input {
 
@@ -30,6 +31,8 @@ struct TickInput {
     std::optional<SDL_Scancode> capturedKey;
     std::uint32_t capturedKeyboard = 0; // keyboard that sent capturedKey
     std::optional<std::uint32_t> capturedController; // joystick id of the controller whose button was captured
+    std::vector<std::pair<float, float>> taps; // fingers that touched down (normalized window x, y), for touch menus
+    bool serviceByTouch = false;               // the service press came from the hidden corner
 };
 
 // Turns SDL keyboard / gamepad / joystick events into per-station and system actions. Events are
@@ -49,6 +52,9 @@ public:
 
     // Station chosen when an unassigned controller presses start (auto assignment); -1 = none.
     void setClaimPolicy(std::function<int()> policy) { claimPolicy_ = std::move(policy); }
+    // What a tap means right now (lobby, playing, ignored); asked on every finger down.
+    void setTouchContext(std::function<TouchContext()> context) { touchContext_ = std::move(context); }
+    int fingersDown() const { return static_cast<int>(fingers_.size()); }
 
     void beginKeyCapture() { captureKey_ = true; }
     void beginControllerCapture() { captureController_ = true; }
@@ -85,6 +91,7 @@ private:
     void onGamepadButton(const SDL_GamepadButtonEvent& b);
     void onJoystickButton(const SDL_JoyButtonEvent& b);
     void onJoystickHat(const SDL_JoyHatEvent& h);
+    void onFinger(const SDL_TouchFingerEvent& f, std::uint32_t type);
     void onControllerAdded(InputDevice* d);
     void onControllerStart(InputDevice& d, std::uint64_t ts);
     void resolveStationKeyboards();
@@ -102,6 +109,16 @@ private:
     std::bitset<kActionCount> systemHeld_;
     std::array<std::bitset<kActionCount>, 4> stationHeld_{};
     std::function<int()> claimPolicy_;
+    std::function<TouchContext()> touchContext_;
+    struct Finger {
+        SDL_FingerID id = 0;
+        std::optional<TouchHit> hit; // the action it pressed, released when the finger lifts
+    };
+    std::vector<Finger> fingers_;
+    std::optional<SDL_FingerID> cornerFinger_; // a finger holding the hidden service corner
+    std::uint64_t cornerSinceNs_ = 0;
+    bool cornerFired_ = false;
+    std::vector<std::pair<float, float>> pendingTaps_;
     bool useTimestamps_ = true;
     bool captureKey_ = false;
     bool captureController_ = false;

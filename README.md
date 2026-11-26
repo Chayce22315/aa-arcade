@@ -23,6 +23,9 @@ aa2 or any other title.
 - **Fire meter**: quick needles fill your flame and close calls count double; when it is full you are
   on fire for 1.5 s and your needles burn through anything they touch
   ([docs/RULES.md](docs/RULES.md#fire-meter)).
+- **Phones and tablets**: Android and iOS builds of the same game. Tap your column to join and to fire
+  (anywhere, when you play alone against bots), up to four players around one tablet, pause when the
+  app goes to the background, layout kept clear of notches ([docs/BUILDING.md](docs/BUILDING.md#android)).
 - **Input**: built-in, USB and Bluetooth keyboards (optionally one keyboard per station), Xbox,
   PlayStation and generic controllers through SDL3, unmapped joysticks as a fallback, hotplug,
   automatic or fixed assignment, and pause-and-reconnect on disconnect.
@@ -67,7 +70,7 @@ build\msvc-x64\Release\spindle.exe
 ```
 
 The executable is fully static (SDL3, Lua and the C runtime are linked in), so `spindle.exe` alone is
-the game. See [docs/BUILDING.md](docs/BUILDING.md) for MinGW cross-compiling, Linux development builds,
+the game. See [docs/BUILDING.md](docs/BUILDING.md) for Android and iOS, MinGW cross-compiling, Linux development builds,
 the headless self-test and the developer tools.
 
 ## Documentation

@@ -299,12 +299,58 @@ void InputSystem::handleEvent(const SDL_Event& e) {
             d->rawAxes[e.jaxis.axis] = static_cast<float>(e.jaxis.value) / 32767.0f;
         break;
     case SDL_EVENT_JOYSTICK_HAT_MOTION: onJoystickHat(e.jhat); break;
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_CANCELED: onFinger(e.tfinger, e.type); break;
     default: break;
     }
 }
 
+void InputSystem::onFinger(const SDL_TouchFingerEvent& f, std::uint32_t type) {
+    const auto it = std::find_if(fingers_.begin(), fingers_.end(), [&](const Finger& g) { return g.id == f.fingerID; });
+    if (type == SDL_EVENT_FINGER_DOWN) {
+        lastEvent_ = std::format("touch {:.2f}, {:.2f}", static_cast<double>(f.x), static_cast<double>(f.y));
+        pendingTaps_.emplace_back(f.x, f.y);
+        if (inServiceCorner(f.x, f.y) && !cornerFinger_) {
+            cornerFinger_ = f.fingerID;
+            cornerSinceNs_ = f.timestamp;
+            cornerFired_ = false;
+        }
+        Finger finger{f.fingerID, std::nullopt};
+        if (touchContext_) finger.hit = touchHit(touchContext_(), f.x, f.y);
+        if (finger.hit) push(f.timestamp, finger.hit->action, finger.hit->station, true);
+        if (it != fingers_.end())
+            *it = finger;
+        else
+            fingers_.push_back(finger);
+        return;
+    }
+    if (type == SDL_EVENT_FINGER_MOTION) {
+        // Sliding out of the corner cancels the hidden hold.
+        if (cornerFinger_ && *cornerFinger_ == f.fingerID && !inServiceCorner(f.x, f.y)) cornerFinger_.reset();
+        return;
+    }
+    // Up or cancelled.
+    if (cornerFinger_ && *cornerFinger_ == f.fingerID) cornerFinger_.reset();
+    if (it == fingers_.end()) return;
+    if (it->hit) push(f.timestamp, it->hit->action, it->hit->station, false);
+    fingers_.erase(it);
+}
+
 TickInput InputSystem::drain(std::uint64_t untilNs) {
     TickInput t;
+    // The hidden operator corner: one service press once a finger has held it long enough.
+    if (cornerFinger_ && !cornerFired_) {
+        const std::uint64_t now = useTimestamps_ && untilNs > 0 ? untilNs : SDL_GetTicksNS();
+        if (now >= cornerSinceNs_ && now - cornerSinceNs_ >= static_cast<std::uint64_t>(kServiceHoldSeconds * 1e9)) {
+            cornerFired_ = true;
+            t.systemPressed[static_cast<std::size_t>(Action::Service)] = true;
+            t.serviceByTouch = true;
+            log::info("input: service menu opened from the hidden corner");
+        }
+    }
+    t.taps.swap(pendingTaps_);
     while (!queue_.empty() && (!useTimestamps_ || queue_.front().timestamp <= untilNs)) {
         const Queued q = queue_.front();
         queue_.pop_front();

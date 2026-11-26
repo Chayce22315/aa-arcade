@@ -26,6 +26,7 @@ constexpr double kDt = geom::kTickSeconds;
 config::Settings SelfTest::adjustSettings(config::Settings s) {
     s.gameplay.seed = 4242;
     s.gameplay.readyDelay = 0.75;
+    s.arcade.freePlay = false; // the script inserts coins (phones default to free play)
     // A shorter fire meter so the scripted match is sure to set someone on fire.
     s.gameplay.fireMeter = true;
     s.gameplay.fireCombo = 4;
@@ -83,6 +84,24 @@ void SelfTest::tapKey(SDL_Scancode sc) {
     };
     send(true);
     releases_.push_back({1, [send] { send(false); }});
+}
+
+void SelfTest::fingerEvent(Uint32 type, SDL_FingerID id, float x, float y) {
+    SDL_Event e{};
+    e.type = type;
+    e.tfinger.touchID = 1;
+    e.tfinger.fingerID = id;
+    e.tfinger.x = x;
+    e.tfinger.y = y;
+    e.tfinger.pressure = 1.0f;
+    e.tfinger.windowID = SDL_GetWindowID(app_.display().window());
+    SDL_PushEvent(&e);
+}
+
+void SelfTest::tapScreen(float x, float y) {
+    const SDL_FingerID id = nextFinger_++;
+    fingerEvent(SDL_EVENT_FINGER_DOWN, id, x, y);
+    releases_.push_back({1, [this, id, x, y] { fingerEvent(SDL_EVENT_FINGER_UP, id, x, y); }});
 }
 
 void SelfTest::setButton(Controller& c, int button, bool down) {
@@ -249,7 +268,7 @@ void SelfTest::build() {
         };
     };
     auto waitFor = [this](std::string name, std::function<bool()> pred, double timeout = 30.0) { add(std::move(name), std::move(pred), timeout); };
-    auto settle = [this](double seconds) {
+    auto settle = [](double seconds) {
         auto t = std::make_shared<double>(0.0);
         return [t, seconds] {
             *t += kDt;
@@ -585,6 +604,72 @@ void SelfTest::build() {
         return true;
     });
     waitFor("T5: back to attract", [A] { return A().state() == ArcadeState::Attract; }, 10);
+
+    // --- touch (phones and tablets; works on any touch screen)
+    const auto norm = [this](float px, float py) {
+        const auto& l = app_.layout();
+        return std::pair<float, float>{px / l.width, py / l.height};
+    };
+    const auto columnPoint = [this](int station) {
+        const auto& l = app_.layout();
+        const auto& c = l.columns[static_cast<std::size_t>(station)];
+        return std::pair<float, float>{(c.x + c.w * 0.5f) / l.width, (c.y + c.h * 0.6f) / l.height};
+    };
+    add("touch: hold a finger on the hidden top-left corner", once([this] { fingerEvent(SDL_EVENT_FINGER_DOWN, 900, 0.02f, 0.03f); }));
+    waitFor("touch: after 3 seconds the service menu opens with touch controls", [this] {
+        return app_.serviceMenu().isOpen() && app_.serviceMenu().touchMode() && app_.serviceMenu().backButton().w > 0.0f;
+    }, 900);
+    add("touch: lift the finger", once([this] { fingerEvent(SDL_EVENT_FINGER_UP, 900, 0.02f, 0.03f); }));
+    add("touch: let the menu draw", settle(0.2));
+    add("touch: tap the second row", once([this, norm] {
+        if (auto pt = app_.serviceMenu().rowPoint(1)) {
+            const auto [x, y] = norm(pt->x, pt->y);
+            tapScreen(x, y);
+        } else {
+            check(false, "second row not on screen");
+        }
+    }));
+    waitFor("touch: the second row is selected", [this] { return app_.serviceMenu().selectedIndex() == 1; }, 5);
+    add("touch: tap back", once([this, norm] {
+        const auto& b = app_.serviceMenu().backButton();
+        const auto [x, y] = norm(b.x + b.w * 0.5f, b.y + b.h * 0.5f);
+        tapScreen(x, y);
+    }));
+    waitFor("touch: back moves to save & exit", [this] { return app_.serviceMenu().selectedLabel() == "save & exit"; }, 5);
+    add("touch: let the menu draw again", settle(0.2));
+    add("touch: tap save & exit", once([this, norm] {
+        if (auto pt = app_.serviceMenu().rowPoint(app_.serviceMenu().selectedIndex())) {
+            const auto [x, y] = norm(pt->x, pt->y);
+            tapScreen(x, y);
+        } else {
+            check(false, "save & exit not on screen");
+        }
+    }));
+    waitFor("touch: the menu closes", [this] { return !app_.serviceMenu().isOpen(); }, 5);
+    add("touch: insert a coin", taps(SDL_SCANCODE_5, 1));
+    waitFor("touch: 1 credit", [A] { return A().credits().credits() == 1; });
+    add("touch: tap station 2's column", once([this, columnPoint] {
+        const auto [x, y] = columnPoint(1);
+        tapScreen(x, y);
+    }));
+    waitFor("touch: station 2 joined", [A] { return A().state() == ArcadeState::Join && A().joined()[1]; }, 5);
+    add("touch: tap it again to start at once", once([this, columnPoint] {
+        const auto [x, y] = columnPoint(1);
+        tapScreen(x, y);
+    }));
+    waitFor("touch: one human playing at station 2", [A] {
+        return A().state() == ArcadeState::Playing && A().lineup().humans == 1 && A().lineup().seats[1] == players::SeatKind::Human;
+    }, 5);
+    waitFor("touch: the round starts", [M] { return M() && M()->phase() == gameplay::MatchPhase::Playing; }, 10);
+    add("touch: remember station 2's needles", once([this, M] { touchNeedles_ = M()->field(1).needlesLeft(); }));
+    add("touch: a tap on the far side of the screen fires station 2's needle", once([this] { tapScreen(0.9f, 0.5f); }));
+    waitFor("touch: station 2 launched a needle", [this, M] { return M() && M()->field(1).needlesLeft() < touchNeedles_; }, 5);
+    shot("17_touch_play");
+    waitFor("touch: keep tapping until the match is over", [this, A] {
+        if (A().state() == ArcadeState::Playing && tick_ % 3 == 0) tapScreen(0.5f, 0.5f);
+        return A().state() == ArcadeState::GameOver;
+    }, 120);
+    waitFor("touch: back to attract", [A] { return A().state() == ArcadeState::Attract; }, 10);
 }
 
 // ------------------------------------------------------------------ runner

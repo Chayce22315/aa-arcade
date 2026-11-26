@@ -66,6 +66,10 @@ public:
     bool serviceOpen() const { return serviceOpen_; }
     void stationDisconnected(int station);
     void stationReconnected(int station);
+    // The app went to the background (phone call, home button): a running match pauses until a
+    // player presses start or fire, so nobody comes back to a round already in motion.
+    void suspend();
+    bool suspended() const { return suspended_; }
 
     ArcadeState state() const { return state_; }
     AttractPage attractPage() const { return attractPage_; }
@@ -134,6 +138,7 @@ private:
     std::array<std::unique_ptr<bots::BotController>, gameplay::kMaxStations> bots_{};
     std::optional<MatchResult> lastResult_;
     bool serviceOpen_ = false;
+    bool suspended_ = false;
     std::vector<ArcadeEvent> events_;
 };
 

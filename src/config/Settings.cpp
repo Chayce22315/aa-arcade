@@ -322,6 +322,12 @@ Settings Settings::defaults() {
     return s;
 }
 
+Settings Settings::mobileDefaults() {
+    Settings s = defaults();
+    s.arcade.freePlay = true;
+    return s;
+}
+
 std::size_t LoadedSettings::invalidCount() const {
     std::size_t n = 0;
     for (const auto& i : issues)
@@ -329,9 +335,9 @@ std::size_t LoadedSettings::invalidCount() const {
     return n;
 }
 
-LoadedSettings loadSettings(const IniDocument& doc) {
+LoadedSettings loadSettings(const IniDocument& doc, const Settings& base) {
     LoadedSettings out;
-    out.settings = Settings::defaults();
+    out.settings = base;
     LoadVisitor v(doc, out);
     visitAll(out.settings, v);
     return out;
@@ -347,8 +353,8 @@ void storeSettings(const Settings& settings, IniDocument& doc) {
     }
 }
 
-std::string defaultSettingsText() {
-    Settings s = Settings::defaults();
+std::string defaultSettingsText(const Settings& base) {
+    Settings s = base;
     RowVisitor v;
     visitAll(s, v);
     std::string out = std::format(

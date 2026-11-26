@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Generate spindle's image assets deterministically (stdlib only).
 
-Right now that is one file: data/art/flame.png, a 128 x 256 RGBA flame used for the fire meter, the
-flames around a circle that is on fire, and the little bursts when a needle burns. Like the sound
-effects, the PNG is committed and compiled into spindle.exe, so building never needs Python.
+- data/art/flame.png: a 128 x 256 RGBA flame used for the fire meter, the flames around a circle that is
+  on fire, and the little bursts when a needle burns. Compiled into the game.
+- The app icon (a core with its needles, white on black) at every size the phone builds need:
+  ios/Assets.xcassets/AppIcon.appiconset/icon-1024.png and the Android launcher icons under
+  android/app/src/main/res/ (legacy squares plus the adaptive-icon foreground).
 
-    python tools/gen_art.py            # writes data/art/*.png
+Like the sound effects, the PNGs are committed, so building never needs Python.
+
+    python tools/gen_art.py            # writes every image
     python tools/gen_art.py --check    # verifies the committed files match the recipes
 """
 
@@ -71,12 +75,12 @@ def flame_pixel(px: int, py: int) -> tuple[int, int, int, int]:
     return tuple(int(round(c)) for c in color) + (int(round(255 * alpha)),)  # type: ignore[return-value]
 
 
-def encode_png(width: int, height: int, rows: list[bytes]) -> bytes:
+def encode_png(width: int, height: int, rows: list[bytes], color_type: int = 6) -> bytes:
     def chunk(tag: bytes, body: bytes) -> bytes:
         return struct.pack(">I", len(body)) + tag + body + struct.pack(">I", zlib.crc32(tag + body) & 0xFFFFFFFF)
 
     raw = b"".join(b"\x00" + r for r in rows)
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)  # 8-bit RGBA
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0)  # 8-bit RGBA (6) or RGB (2)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 
 
@@ -90,19 +94,87 @@ def flame() -> bytes:
     return encode_png(W, H, rows)
 
 
-RECIPES = {"flame": flame}
+# ------------------------------------------------------------------ app icon
+
+def icon_shapes():
+    """The attract-mode decoration in unit coordinates (0..1, y down): a core, nine needles, one in flight."""
+    cx, cy = 0.5, 0.46
+    core, length, ball, needle = 0.125, 0.30, 0.042, 0.011
+    shapes = [("disc", cx, cy, core)]
+    for i in range(9):
+        a = -math.pi / 2 + 2 * math.pi * i / 9 + (0.25 if i % 3 == 0 else 0.0)
+        px, py = cx + length * math.cos(a), cy + length * math.sin(a)
+        shapes.append(("capsule", cx, cy, px, py, needle))
+        shapes.append(("disc", px, py, ball))
+    shapes.append(("disc", cx, cy + 0.43, ball))  # the next needle on its way up
+    return shapes
+
+
+def _segment_distance(x, y, ax, ay, bx, by):
+    vx, vy = bx - ax, by - ay
+    t = max(0.0, min(1.0, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)))
+    return math.hypot(x - (ax + vx * t), y - (ay + vy * t))
+
+
+def icon(size: int, transparent: bool, scale: float = 1.0) -> bytes:
+    """White marks with analytic anti-aliasing; scale shrinks the art toward the centre (adaptive icons)."""
+    shapes = icon_shapes()
+    reach = 0.5 * scale * 1.02
+    rows = []
+    for py in range(size):
+        row = bytearray()
+        for px in range(size):
+            # pixel centre in unit art coordinates
+            ux = 0.5 + ((px + 0.5) / size - 0.5) / scale
+            uy = 0.5 + ((py + 0.5) / size - 0.5) / scale
+            cover = 0.0
+            if abs((px + 0.5) / size - 0.5) <= reach and abs((py + 0.5) / size - 0.5) <= reach:
+                d = 1e9
+                for sh in shapes:
+                    if sh[0] == "disc":
+                        d = min(d, math.hypot(ux - sh[1], uy - sh[2]) - sh[3])
+                    else:
+                        d = min(d, _segment_distance(ux, uy, sh[1], sh[2], sh[3], sh[4]) - sh[5])
+                d_px = d * size * scale
+                cover = max(0.0, min(1.0, 0.5 - d_px))
+            v = int(round(255 * cover))
+            if transparent:
+                row += bytes((255, 255, 255, v))
+            else:
+                row += bytes((v, v, v))
+        rows.append(bytes(row))
+    return encode_png(size, size, rows, 6 if transparent else 2)
+
+
+ANDROID_DENSITIES = {"mdpi": 1.0, "hdpi": 1.5, "xhdpi": 2.0, "xxhdpi": 3.0, "xxxhdpi": 4.0}
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def outputs():
+    """(path relative to the repository, recipe) for every generated image."""
+    out = [(Path("data/art/flame.png"), flame)]
+    # iOS: one 1024 x 1024 opaque icon (the App Store refuses an alpha channel).
+    out.append((Path("ios/Assets.xcassets/AppIcon.appiconset/icon-1024.png"), lambda: icon(1024, False)))
+    res = Path("android/app/src/main/res")
+    for name, k in ANDROID_DENSITIES.items():
+        legacy, fg = int(48 * k), int(108 * k)
+        out.append((res / f"mipmap-{name}" / "ic_launcher.png", lambda n=legacy: icon(n, False)))
+        # Adaptive icon foreground: 108 dp canvas, art inside the 66 dp safe circle; background colour in XML.
+        out.append((res / f"mipmap-{name}" / "ic_launcher_foreground.png", lambda n=fg: icon(n, True, 66.0 / 108.0)))
+    return out
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent / "data" / "art")
+    parser.add_argument("--root", type=Path, default=ROOT, help="repository root to write into")
     parser.add_argument("--check", action="store_true", help="verify committed files instead of writing")
     args = parser.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
     mismatches = 0
-    for name, recipe in RECIPES.items():
+    for rel, recipe in outputs():
         data = recipe()
-        path = args.out / f"{name}.png"
+        path = args.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
         if args.check:
             if not path.exists() or path.read_bytes() != data:
                 print(f"MISMATCH {path}")

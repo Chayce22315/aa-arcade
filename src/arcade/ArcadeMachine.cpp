@@ -62,7 +62,14 @@ bool ArcadeMachine::pausedForDisconnect() const {
 }
 
 void ArcadeMachine::updatePause() {
-    if (match_) match_->setPaused(serviceOpen_ || pausedForDisconnect());
+    if (match_) match_->setPaused(serviceOpen_ || suspended_ || pausedForDisconnect());
+}
+
+void ArcadeMachine::suspend() {
+    if (state_ != ArcadeState::Playing || !match_ || match_->over()) return;
+    if (!suspended_) log::info("arcade: match suspended (app in the background)");
+    suspended_ = true;
+    updatePause();
 }
 
 void ArcadeMachine::setServiceOpen(bool open) {
@@ -98,6 +105,7 @@ std::vector<ArcadeEvent> ArcadeMachine::takeEvents() {
 void ArcadeMachine::enter(ArcadeState s) {
     state_ = s;
     stateTime_ = 0.0;
+    if (s != ArcadeState::Playing) suspended_ = false;
     if (s != ArcadeState::GameOver && s != ArcadeState::Playing) {
         match_.reset();
         for (auto& b : bots_) b.reset();
@@ -335,6 +343,19 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
         break;
     }
     case ArcadeState::Playing: {
+        if (suspended_) {
+            // Any human start or fire resumes; that press is used up waking the match.
+            bool wake = false;
+            for (int s = 0; s < gameplay::kMaxStations; ++s) {
+                const auto& st = input.stations[static_cast<std::size_t>(s)];
+                if (lineup_.seats[static_cast<std::size_t>(s)] == players::SeatKind::Human && (st.startPressed || st.firePresses > 0)) wake = true;
+            }
+            if (!wake) break;
+            suspended_ = false;
+            log::info("arcade: match resumed");
+            updatePause();
+            break;
+        }
         for (int s = 0; s < gameplay::kMaxStations; ++s) {
             // Pressing start at a station whose controller vanished hands it to that station's keys.
             if (stationWaitingForReconnect(s) && input.stations[static_cast<std::size_t>(s)].startPressed) stationReconnected(s);

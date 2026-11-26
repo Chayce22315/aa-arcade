@@ -15,6 +15,7 @@ struct ScreenContext {
     double exitHold = 0.0;  // seconds the exit key has been held
     double exitHoldLimit = 0.0;
     SDL_Texture* flame = nullptr; // data/art/flame.png; null if it failed to load
+    bool touchUi = false;         // phones and tablets: "tap" prompts instead of buttons
 };
 
 // Draws the whole cabinet screen for the current arcade state (everything procedural).

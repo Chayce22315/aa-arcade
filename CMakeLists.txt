@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  # std::format of floating point needs iOS 16.3+ in Apple's C++ library.
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "16.4" CACHE STRING "Minimum iOS version")
+endif()
+
 project(spindle VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -10,8 +15,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Static CRT everywhere (including SDL) so spindle.exe needs no redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# Phones (docs/BUILDING.md): Android builds libmain.so for the Gradle project in android/, iOS builds an
+# app bundle with the Xcode generator. Neither builds the desktop test runner by default.
+if(ANDROID OR IOS)
+  set(SPINDLE_MOBILE ON)
+else()
+  set(SPINDLE_MOBILE OFF)
+endif()
+if(SPINDLE_MOBILE)
+  set(SPINDLE_TESTS_DEFAULT OFF)
+else()
+  set(SPINDLE_TESTS_DEFAULT ON)
+endif()
+
 option(SPINDLE_SYSTEM_SDL3 "Use an installed SDL3 (find_package) instead of the pinned release" OFF)
-option(SPINDLE_BUILD_TESTS "Build the spindle_tests unit test executable" ON)
+option(SPINDLE_BUILD_TESTS "Build the spindle_tests unit test executable" ${SPINDLE_TESTS_DEFAULT})
+set(SPINDLE_BUNDLE_ID "io.itch.chayce22315.spindle" CACHE STRING "Application id (Android) / bundle identifier (iOS)")
+set(SPINDLE_IOS_TEAM_ID "" CACHE STRING "Apple development team id for signed iOS device builds (empty: simulator / unsigned)")
 option(SPINDLE_BUILD_GAME "Build the SDL3 platform layer and spindle executable" ON)
 option(SPINDLE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors in spindle code" ON)
 
@@ -26,8 +46,14 @@ elseif(SPINDLE_SYSTEM_SDL3)
   find_package(SDL3 3.4 REQUIRED CONFIG)
 else()
   include(FetchContent)
-  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  if(ANDROID)
+    # Android's Java side (SDLActivity) loads libSDL3.so and libmain.so separately.
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+  else()
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  endif()
   set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
   set(SDL_TESTS OFF CACHE BOOL "" FORCE)
   set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -98,6 +124,7 @@ add_library(spindle_core STATIC
   src/arcade/Bookkeeping.cpp
   src/arcade/ArcadeMachine.cpp
   src/input/Keybinds.cpp
+  src/input/TouchZones.cpp
   src/render/StrokeFont.cpp
   src/render/Layout.cpp
   src/menus/MenuModel.cpp)
@@ -129,11 +156,36 @@ endif()
 spindle_set_warnings(spindle_platform)
 
 # ---------------------------------------------------------------- executable
-add_executable(spindle WIN32 src/main.cpp)
-target_link_libraries(spindle PRIVATE spindle_platform)
-spindle_set_warnings(spindle)
-if(MINGW)
-  target_link_options(spindle PRIVATE -static -static-libgcc -static-libstdc++)
+if(ANDROID)
+  # SDLActivity runs SDL_main from libmain.so (see android/).
+  add_library(main SHARED src/main.cpp)
+  target_link_libraries(main PRIVATE spindle_platform)
+  spindle_set_warnings(main)
+elseif(IOS)
+  set(SPINDLE_IOS_ASSETS ${CMAKE_CURRENT_SOURCE_DIR}/ios/Assets.xcassets)
+  add_executable(spindle MACOSX_BUNDLE src/main.cpp ${SPINDLE_IOS_ASSETS})
+  set_source_files_properties(${SPINDLE_IOS_ASSETS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+  target_link_libraries(spindle PRIVATE spindle_platform)
+  spindle_set_warnings(spindle)
+  set_target_properties(spindle PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/ios/Info.plist.in
+    MACOSX_BUNDLE_BUNDLE_NAME spindle
+    MACOSX_BUNDLE_GUI_IDENTIFIER ${SPINDLE_BUNDLE_ID}
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${SPINDLE_BUNDLE_ID}
+    XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET ${CMAKE_OSX_DEPLOYMENT_TARGET}
+    XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${SPINDLE_IOS_TEAM_ID}"
+    XCODE_ATTRIBUTE_CODE_SIGN_STYLE Automatic)
+else()
+  add_executable(spindle WIN32 src/main.cpp)
+  target_link_libraries(spindle PRIVATE spindle_platform)
+  spindle_set_warnings(spindle)
+  if(MINGW)
+    target_link_options(spindle PRIVATE -static -static-libgcc -static-libstdc++)
+  endif()
 endif()
 endif()
 
@@ -152,6 +204,7 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestPlayfield.cpp
     tests/TestPowerups.cpp
     tests/TestFire.cpp
+    tests/TestMobile.cpp
     tests/TestMatchRules.cpp
     tests/TestMatch.cpp
     tests/TestPlayerManager.cpp

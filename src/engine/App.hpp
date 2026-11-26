@@ -42,6 +42,8 @@ public:
 
     // ServiceHost
     const config::Settings& currentSettings() const override { return settings_; }
+    config::Settings defaultSettings() const override;
+    bool touchUi() const override;
     void commitSettings(const config::Settings& settings) override;
     void previewDisplay(const config::Settings::Display& display) override;
     void previewVolumes(const config::Settings::Audio& audio) override;
@@ -82,6 +84,9 @@ private:
     void render();
     void handleArcadeEvents();
     void updateLayout();
+    void handleLifecycle(const SDL_Event& e);
+    void updateScreenSaver();
+    input::TouchContext touchContext() const;
     void loadSettingsFile();
     std::unique_ptr<bots::BotController> makeBot(config::Difficulty difficulty, std::uint64_t seed);
 
@@ -114,6 +119,7 @@ private:
     double frameMs_ = 0.0;
     double exitHeld_ = 0.0;
     double clockSeconds_ = 0.0;
+    int screenSaverAllowed_ = -1; // last state set on a phone (-1 = not yet)
 
     friend class SelfTest;
 };

@@ -33,6 +33,8 @@ struct ScreenLayout {
     }
 };
 
-ScreenLayout computeLayout(int pixelWidth, int pixelHeight);
+// safe, when not empty, is the part of the screen clear of notches, rounded corners and system bars
+// (pixels); the four columns are fitted inside it. Full-screen backgrounds still cover the whole screen.
+ScreenLayout computeLayout(int pixelWidth, int pixelHeight, Rect safe = {});
 
 } // namespace spindle::render

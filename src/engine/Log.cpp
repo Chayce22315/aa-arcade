@@ -14,6 +14,7 @@ struct State {
     std::mutex mutex;
     std::ofstream file;
     bool echo = true;
+    Sink sink = nullptr;
     std::deque<std::string> problems;
 };
 
@@ -60,6 +61,12 @@ void setEchoToStderr(bool echo) {
     s.echo = echo;
 }
 
+void setSink(Sink sink) {
+    State& s = state();
+    std::lock_guard lock(s.mutex);
+    s.sink = sink;
+}
+
 void write(Level lvl, std::string_view message) {
     if (static_cast<int>(lvl) > g_level.load()) return;
     const auto now = std::chrono::floor<std::chrono::milliseconds>(std::chrono::system_clock::now());
@@ -74,6 +81,7 @@ void write(Level lvl, std::string_view message) {
         std::fputs(line.c_str(), stderr);
         std::fputc('\n', stderr);
     }
+    if (s.sink) s.sink(lvl, line.c_str());
     if (lvl <= Level::Warn) {
         s.problems.push_back(std::move(line));
         while (s.problems.size() > kProblemHistory) s.problems.pop_front();
