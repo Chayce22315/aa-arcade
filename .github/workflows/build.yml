@@ -169,7 +169,15 @@ jobs:
           -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator
           -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=16.4
       - name: Build
-        run: cmake --build build/ios --config Release -- -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO
+        run: |
+          # xcodebuild is very chatty: keep the full log as an artifact and show only the problems here.
+          if ! cmake --build build/ios --config Release -- -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO > ios-build.log 2>&1; then
+            grep -E -A8 "(error|fatal error):" ios-build.log | head -n 300
+            grep -E -A20 "The following build commands failed" ios-build.log | head -n 40
+            exit 1
+          fi
+          grep -c "warning:" ios-build.log || true
+          tail -n 3 ios-build.log
       - name: Run the four-station self-test in the iOS simulator
         run: python3 ci/ios_selftest.py build/ios/Release-iphonesimulator/spindle.app selftest-ios
       - name: Package the simulator app
@@ -183,6 +191,12 @@ jobs:
         with:
           name: spindle-ios-simulator
           path: spindle-ios-simulator.zip
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-build-log
+          path: ios-build.log
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()

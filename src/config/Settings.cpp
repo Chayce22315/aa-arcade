@@ -3,7 +3,9 @@
 #include <charconv>
 #include <cmath>
 #include <format>
+#include <locale>
 #include <span>
+#include <sstream>
 
 #include "assets/ControllerDbPin.hpp"
 #include "engine/Branding.hpp"
@@ -44,13 +46,35 @@ std::optional<long long> parseInteger(std::string_view s) {
     return v;
 }
 
+// Plain decimal numbers only ("1.5", "-2", ".25", "3e-2"): no inf, nan or hex. Parsed in the classic
+// locale, so a comma-decimal system locale never changes what settings.ini means. (std::from_chars for
+// floating point is missing from the C++ libraries of Android's NDK and older Apple SDKs.)
 std::optional<double> parseReal(std::string_view s) {
     s = trim(s);
     if (s.empty()) return std::nullopt;
     if (s.front() == '+') s.remove_prefix(1);
-    double v = 0;
-    auto [p, ec] = std::from_chars(s.data(), s.data() + s.size(), v);
-    if (ec != std::errc{} || p != s.data() + s.size() || !std::isfinite(v)) return std::nullopt;
+    std::size_t i = 0;
+    if (i < s.size() && s[i] == '-') ++i;
+    std::size_t digits = 0;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') ++i, ++digits;
+    if (i < s.size() && s[i] == '.') {
+        ++i;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9') ++i, ++digits;
+    }
+    if (digits == 0) return std::nullopt;
+    if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
+        ++i;
+        if (i < s.size() && (s[i] == '+' || s[i] == '-')) ++i;
+        std::size_t expDigits = 0;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9') ++i, ++expDigits;
+        if (expDigits == 0) return std::nullopt;
+    }
+    if (i != s.size()) return std::nullopt;
+    std::istringstream in{std::string(s)};
+    in.imbue(std::locale::classic());
+    double v = 0.0;
+    in >> v;
+    if (in.fail() || !std::isfinite(v)) return std::nullopt;
     return v;
 }
 
