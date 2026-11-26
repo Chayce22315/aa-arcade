@@ -135,6 +135,8 @@ and the identical round conditions are untouched.
 | heat | small flame | sets the station on fire at once (see the fire meter). Only appears while the fire meter is on. |
 | purge | cross | burns away the two pre-placed needles nearest to where the ring was taken (never a player's own needles) |
 | swift | double chevron | this station's needles fly 1.6x faster for the rest of the round, so there is less to lead |
+| gold | coin | for 5 s, every needle this station places scores double (on top of the combo or fire multiplier); the needle that takes the ring is scored before it takes it |
+| ghost | dashed ring | the next needle this station fires touches nothing in flight and sticks wherever it lands, even right on another needle (not a close call); once stuck it is an ordinary needle that later needles can touch. A needle fired while on fire stays a fire needle and the ghost waits for the next one |
 
 - Rounds 3-8 have one ring, 9-15 two, 16 on three (fewer when the circle is too crowded to place
   them clear of the pre-placed needles). At most one ring per round is a mend, and at most one is a heat.
@@ -233,6 +235,34 @@ pause; the numbers appear at once).
   at once can never push each other out: an unreserved row gives way instead, even one with a slightly
   higher score.
 - The attract loop shows the tables; the service menu shows and clears them.
+
+## Achievements
+
+The cabinet keeps lifetime stats and 14 achievements in `progress.ini`. spindle has no player accounts,
+so they belong to the machine: whoever earns one earns it for everyone. Only humans earn them, never the
+attract demo. An achievement pops up in the column of the player who earned it.
+
+| Achievement | How | Unlocks |
+|---|---|---|
+| first pin | place a needle | |
+| round 10 | reach round 10 | |
+| round 25 | reach round 25 | comet trails: needles in flight leave a tail |
+| close shaves | 5 close calls in one game | |
+| hot hands | catch fire 3 times in one game | blue flames |
+| crowned | take the crown | |
+| royalty | take the crown 5 times in one game | royal crown: a velvet cap and jewels |
+| ring collector | take 5 rings in one game | |
+| ten thousand | score 10000 in one game | |
+| six figures | score 100000 in one game | |
+| on the board | shoot your initials into a high score table | |
+| flawless | win a game with knock-outs against at least one other player without losing a try (not teams) | |
+| tourist | finish a game in every mode | |
+| thousand needles | 1000 needles placed by humans on this machine | |
+
+A look starts switched on when it unlocks; the service menu's progress page (and, on phones, the options
+behind the gear) switches unlocked looks on and off. Looks are only drawing: they change nothing in play.
+The attract loop shows the machine's stats after the high scores once a game has been played. Values are
+uncalibrated.
 
 ## Standings
 

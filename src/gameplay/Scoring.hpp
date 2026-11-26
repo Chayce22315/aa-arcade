@@ -23,6 +23,7 @@ struct Placement {
     double comboFill = 0.0;    // fire-meter fill (0..1) before this needle
     bool onFire = false;       // the station was on fire when it landed
     bool fireMeter = false;    // the fire meter is on this round (no meter = no combo multiplier)
+    bool gold = false;         // a gold ring is active: the needle's points are doubled
 };
 
 std::int64_t placementPoints(const Placement& p, int round);

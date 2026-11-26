@@ -9,11 +9,15 @@
 #include <filesystem>
 #include <optional>
 #include <random>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "assets/ControllerDbPin.hpp"
 #include "assets/EmbeddedAssets.hpp"
 #include "assets/PngInfo.hpp"
 #include "config/AtomicFile.hpp"
+#include "config/IniDocument.hpp"
 #include "engine/App.hpp"
 #include "engine/Branding.hpp"
 #include "engine/Log.hpp"
@@ -234,6 +238,23 @@ bool App::bootArcade() {
         log::info("high scores: loaded");
     }
     arcade_->setToday(localIsoDate());
+    if (auto text = config::readFile(paths_.progress())) {
+        arcade_->setProgress(arcade::Progress::parse(config::IniDocument::parse(*text)));
+        log::info("progress: {} matches, {} of {} achievements", arcade_->progress().stats().matches, arcade_->progress().earnedCount(),
+                  arcade::kAchievementCount);
+    }
+    if (auto text = assets::embeddedText("whats_new.txt")) {
+        std::vector<std::string> lines;
+        std::size_t pos = 0;
+        while (pos < text->size() && lines.size() < 10) {
+            std::size_t end = text->find('\n', pos);
+            if (end == std::string_view::npos) end = text->size();
+            const std::string_view line = config::trim(text->substr(pos, end - pos));
+            if (!line.empty() && line.front() != '#') lines.emplace_back(line);
+            pos = end + 1;
+        }
+        arcade_->setWhatsNew(std::move(lines), std::string(kVersion));
+    }
     service_ = std::make_unique<menus::ServiceMenu>(*this);
 
     input_.setTouchContext([this] { return touchContext(); });

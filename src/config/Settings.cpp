@@ -135,7 +135,8 @@ void visitAll(Settings& s, V& v) {
     v.integer("master_volume", s.audio.masterVolume, 0, 100, "overall volume");
     v.integer("sfx_volume", s.audio.sfxVolume, 0, 100, "gameplay sounds");
     v.integer("ui_volume", s.audio.uiVolume, 0, 100, "coin, join and menu sounds");
-    v.boolean("attract_sound", s.audio.attractSound, "1 = play sounds during attract mode");
+    v.integer("music_volume", s.audio.musicVolume, 0, 100, "music (played live, it builds up as players heat up), 0 = off");
+    v.boolean("attract_sound", s.audio.attractSound, "1 = play sounds and music during attract mode");
 
     v.section("Gameplay", "Round rules shared by every station. Speed values are uncalibrated: tune by feel.");
     v.integer("tries", s.gameplay.tries, 1, 9, "tries per player per match; a failed round costs one");
@@ -147,7 +148,7 @@ void visitAll(Settings& s, V& v) {
     v.seed("seed", s.gameplay.seed, "0 = new random levels each match; any other number repeats the same levels");
     v.boolean("powerups", s.gameplay.powerups, "1 = powerup rings appear on the circles from round 3 (never in sudden death)");
     v.powerupList("powerup_types", s.gameplay.powerupTypes,
-                  "which rings may appear: shield, skip, slim, mend, heat, purge, swift (comma list, or none); heat needs the fire meter");
+                  "which rings may appear: shield, skip, slim, mend, heat, purge, swift, gold, ghost (comma list, or none); heat needs the fire meter");
     v.boolean("fire_meter", s.gameplay.fireMeter, "1 = quick needles fill a combo meter; full = on fire, needles burn through (never in sudden death)");
     v.integer("fire_combo", s.gameplay.fireCombo, 4, 30, "combo points to catch fire; a needle is 1, a close call 2");
     v.real("fire_seconds", s.gameplay.fireSeconds, 0.5, 5.0, "seconds a player stays on fire");

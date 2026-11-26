@@ -175,6 +175,36 @@ void ServiceMenu::addFeedbackItems(std::vector<MenuItem>& items) {
     items.push_back(buzz(intItem(host_.touchUi() ? "vibration strength" : "rumble strength", edit_.feedback.strength, 0, 100, 10, "%")));
 }
 
+// The looks achievements unlock. They belong to the cabinet's progress, not to settings.ini, so a change
+// is saved at once (save & exit or not).
+void ServiceMenu::addLookItems(std::vector<MenuItem>& items, bool unlockedOnly) {
+    bool first = true;
+    for (std::size_t i = 0; i < arcade::kLookCount; ++i) {
+        const auto look = static_cast<arcade::Look>(i);
+        const bool open = host_.arcadeMachine().progress().unlocked(look);
+        if (unlockedOnly && !open) continue;
+        MenuItem m;
+        m.label = std::string(arcade::lookName(look));
+        m.separatorBefore = first;
+        first = false;
+        m.enabled = open;
+        m.value = [this, look, open] {
+            if (open) return std::string(host_.arcadeMachine().progress().lookOn(look) ? "on" : "off");
+            for (std::size_t k = 0; k < arcade::kAchievementCount; ++k) {
+                const auto info = arcade::achievementInfo(static_cast<arcade::Achievement>(k));
+                if (info.unlocks == look) return std::format("locked - {}", info.blurb);
+            }
+            return std::string("locked");
+        };
+        m.adjust = [this, look](int) {
+            auto& p = host_.arcadeMachine().progress();
+            p.setLook(look, !p.lookOn(look));
+            host_.saveProgress();
+        };
+        items.push_back(std::move(m));
+    }
+}
+
 void ServiceMenu::show(PageId id) {
     pageId_ = id;
     pendingConfirm_.clear();
@@ -201,6 +231,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(pageItem("game modes", PageId::Modes));
         items.push_back(pageItem("bookkeeping", PageId::Bookkeeping));
         items.push_back(pageItem("high scores", PageId::HighScores));
+        items.push_back(pageItem("progress", PageId::Progress));
         MenuItem reset = actionItem("reset defaults", [this] {
             if (confirm("reset")) {
                 edit_ = host_.defaultSettings();
@@ -318,7 +349,9 @@ void ServiceMenu::build(PageId id) {
         items.push_back(preview(intItem("volume", edit_.audio.masterVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("music", edit_.audio.musicVolume, 0, 100, 5, "%")));
         addFeedbackItems(items);
+        addLookItems(items, true);
         MenuItem flashes = boolItem("reduce flashes", edit_.accessibility.reduceFlashes);
         flashes.separatorBefore = true;
         items.push_back(std::move(flashes));
@@ -389,6 +422,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(preview(intItem("master", edit_.audio.masterVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("game sounds", edit_.audio.sfxVolume, 0, 100, 5, "%")));
         items.push_back(preview(intItem("coin and menu sounds", edit_.audio.uiVolume, 0, 100, 5, "%")));
+        items.push_back(preview(intItem("music", edit_.audio.musicVolume, 0, 100, 5, "%")));
         items.push_back(boolItem("attract sound", edit_.audio.attractSound));
         addFeedbackItems(items);
         break;
@@ -566,6 +600,43 @@ void ServiceMenu::build(PageId id) {
         clear.value = [this] { return std::string(pendingConfirm_ == "clear scores" ? "press again to confirm" : ""); };
         clear.separatorBefore = true;
         items.push_back(std::move(clear));
+        break;
+    }
+    case PageId::Progress: {
+        title = "progress";
+        auto& progress = host_.arcadeMachine().progress();
+        const auto& st = progress.stats();
+        const auto info = [&items](std::string label, std::string value, bool separator = false) {
+            MenuItem m;
+            m.label = std::move(label);
+            m.value = [value] { return value; };
+            m.enabled = false;
+            m.separatorBefore = separator;
+            items.push_back(std::move(m));
+        };
+        info("games played", std::to_string(st.matches));
+        info("needles placed", std::to_string(st.needles));
+        info("rounds cleared", std::to_string(st.roundsCleared));
+        info("close calls / fires / crowns", std::format("{} / {} / {}", st.closeCalls, st.fires, st.crowns));
+        info("best score / best round", std::format("{} / {}", st.bestScore, st.bestRound));
+        for (std::size_t i = 0; i < arcade::kAchievementCount; ++i) {
+            const auto a = static_cast<arcade::Achievement>(i);
+            const auto ai = arcade::achievementInfo(a);
+            info(std::string(ai.name), progress.earned(a) ? std::string("earned") : std::string(ai.blurb), i == 0);
+        }
+        addLookItems(items, false);
+        MenuItem reset = actionItem("reset progress", [this, &progress] {
+            if (confirm("reset progress")) {
+                progress.reset();
+                host_.saveProgress();
+                notice_ = "progress reset";
+                noticeTime_ = 3.0;
+                rebuildPending_ = true;
+            }
+        });
+        reset.value = [this] { return std::string(pendingConfirm_ == "reset progress" ? "press again to confirm" : ""); };
+        reset.separatorBefore = true;
+        items.push_back(std::move(reset));
         break;
     }
     }

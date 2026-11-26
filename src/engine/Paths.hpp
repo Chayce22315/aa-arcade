@@ -19,6 +19,7 @@ struct Paths {
     std::filesystem::path logFile() const { return writable / "logs" / "spindle.log"; }
     std::filesystem::path controllerDb() const { return writable / "gamecontrollerdb.txt"; }
     std::filesystem::path screenshots() const { return writable / "screenshots"; }
+    std::filesystem::path progress() const { return writable / "progress.ini"; }
     // Optional operator overrides of the embedded scripts.
     std::filesystem::path levelScriptOverride() const { return base / "data" / "scripts" / "levels.lua"; }
     std::filesystem::path botScriptOverride() const { return base / "data" / "scripts" / "bots" / "bot.lua"; }

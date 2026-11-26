@@ -82,6 +82,46 @@ jobs:
           python3 tools/gen_sfx.py --check
           python3 tools/gen_art.py --check
 
+  linux-game:
+    name: Linux x64 (game + self-test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Development packages SDL builds its Linux backends against
+        # SDL loads X11, Wayland, ALSA and PulseAudio at run time; the headers only switch them on.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev wayland-protocols \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libdrm-dev libgbm-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev
+      - name: Configure
+        run: cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/linux --parallel
+      - name: Unit tests
+        run: build/linux/spindle_tests
+      - name: Four-station self-test (headless)
+        run: python3 tools/run_selftest.py build/linux/spindle --out selftest-run
+      - name: Package
+        run: |
+          mkdir -p dist/spindle
+          cp build/linux/spindle README.md LICENSE dist/spindle/
+          cp -r docs dist/spindle/docs
+          tar -C dist -czf spindle-linux-x64.tar.gz spindle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spindle-linux-x64
+          path: spindle-linux-x64.tar.gz
+      - name: Upload self-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-linux
+          path: selftest-run
+          if-no-files-found: ignore
+
   android:
     name: Android (APK)
     runs-on: ubuntu-latest
@@ -104,8 +144,25 @@ jobs:
           echo "NDK $NDK, CMake $CMAKE"
           echo "SPINDLE_NDK=$NDK" >> "$GITHUB_ENV"
           echo "SPINDLE_CMAKE=$CMAKE" >> "$GITHUB_ENV"
+      - name: Release signing key (optional repository secrets)
+        # Set SPINDLE_KEYSTORE_B64 (base64 of the keystore file), SPINDLE_KEYSTORE_PASSWORD,
+        # SPINDLE_KEY_ALIAS and SPINDLE_KEY_PASSWORD to sign the release APK with your own key.
+        env:
+          KEYSTORE_B64: ${{ secrets.SPINDLE_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/spindle-release.keystore"
+            echo "SPINDLE_KEYSTORE=$RUNNER_TEMP/spindle-release.keystore" >> "$GITHUB_ENV"
+            echo "release APK: signed with the repository's release key"
+          else
+            echo "release APK: no SPINDLE_KEYSTORE_B64 secret, signed with the debug key"
+          fi
       - name: Build the release APK (arm64 + x86_64)
         working-directory: android
+        env:
+          SPINDLE_KEYSTORE_PASSWORD: ${{ secrets.SPINDLE_KEYSTORE_PASSWORD }}
+          SPINDLE_KEY_ALIAS: ${{ secrets.SPINDLE_KEY_ALIAS }}
+          SPINDLE_KEY_PASSWORD: ${{ secrets.SPINDLE_KEY_PASSWORD }}
         run: ./gradlew --no-daemon assembleRelease -Pspindle.ndkVersion="$SPINDLE_NDK" -Pspindle.cmakeVersion="$SPINDLE_CMAKE"
       - name: Build the debug APK for the emulator (x86_64)
         working-directory: android

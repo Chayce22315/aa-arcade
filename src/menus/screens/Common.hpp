@@ -71,6 +71,10 @@ void drawPowerupIcon(render::Renderer2D& r, gameplay::PowerupKind kind, Vec2 c, 
 const char* powerupBlurb(gameplay::PowerupKind kind);
 const char* powerupLabel(gameplay::PowerupKind kind);
 void flame(const ScreenContext& c, Vec2 base, float w, float h, float angle, Color tint);
+// Unlockable looks (arcade/Progress): the fire's colours follow "blue flames".
+bool lookOn(const ScreenContext& c, arcade::Look look);
+Color fireColor(const ScreenContext& c);
+Color fireHotColor(const ScreenContext& c);
 void decorativeCircle(const ScreenContext& c, Vec2 centre, float scale, double t);
 void drawStationHeader(const ScreenContext& c, int s, std::string_view kind, Color col);
 void drawStationStatus(const ScreenContext& c, int s, std::string_view text, Color col, float cap = 30);
@@ -89,6 +93,9 @@ void drawCrownLayer(const ScreenContext& c, const gameplay::Match& m);          
 void drawInitialsColumn(const ScreenContext& c, int s);                            // Initials.cpp
 void drawTitle(const ScreenContext& c);                                             // Attract.cpp
 void drawHowTo(const ScreenContext& c);
+void drawWhatsNew(const ScreenContext& c);
+void drawStats(const ScreenContext& c);
+void drawAchievementToasts(const ScreenContext& c);
 void drawHighScores(const ScreenContext& c);
 void drawInsertCoin(const ScreenContext& c);
 void drawVote(const ScreenContext& c);                                              // Lobby.cpp

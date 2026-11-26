@@ -20,7 +20,7 @@ and a comment describing the valid values.
 - **Phones and tablets** write the same file into the app's private data folder, with one different
   default: `free_play = 1` (a phone has no coin slot). The display settings are ignored there: the game
   always fills the screen in landscape.
-- `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend`, `heat`, `purge`, `swift` (or `none`); it is stored in
+- `powerup_types` is a comma list of `shield`, `skip`, `slim`, `mend`, `heat`, `purge`, `swift`, `gold`, `ghost` (or `none`); it is stored in
   that canonical order. An unknown name makes the whole value invalid (default used).
 
 Check a file without starting the game:
@@ -78,7 +78,8 @@ Volumes are percentages.
 | `master_volume` | `80` | 0..100 | overall volume |
 | `sfx_volume` | `100` | 0..100 | gameplay sounds |
 | `ui_volume` | `80` | 0..100 | coin, join and menu sounds |
-| `attract_sound` | `1` | 0 \| 1 | 1 = play sounds during attract mode |
+| `music_volume` | `60` | 0..100 | the live music (0 = off): a calm loop on attract; in a match the bass, drums and hats come in as the humans' fire meters fill, the lead while one of them is on fire |
+| `attract_sound` | `1` | 0 \| 1 | 1 = play sounds and music during attract mode |
 
 ### [Gameplay]
 
@@ -94,7 +95,7 @@ Round rules shared by every station. Speed values are uncalibrated: tune by feel
 | `start_round` | `1` | 1..50 | round number a match starts at |
 | `seed` | `0` | text | 0 = new random levels each match; any other number repeats the same levels |
 | `powerups` | `1` | 0 \| 1 | 1 = powerup rings appear on the circles from round 3 (never in sudden death) |
-| `powerup_types` | `shield, skip, slim, mend, heat, purge, swift` | text | which rings may appear: shield, skip, slim, mend, heat, purge, swift (comma list, or none); heat needs the fire meter |
+| `powerup_types` | `shield, skip, slim, mend, heat, purge, swift, gold, ghost` | text | which rings may appear: shield, skip, slim, mend, heat, purge, swift, gold, ghost (comma list, or none); heat needs the fire meter |
 | `fire_meter` | `1` | 0 \| 1 | 1 = quick needles fill a combo meter; full = on fire, needles burn through (never in sudden death) |
 | `fire_combo` | `8` | 4..30 | combo points to catch fire; a needle is 1, a close call 2 |
 | `fire_seconds` | `1.5` | 0.5..5.0 | seconds a player stays on fire |

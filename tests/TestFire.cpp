@@ -408,7 +408,7 @@ TEST_CASE(settings_fire_meter_keys) {
     CHECK_EQ(d.gameplay.fireCombo, 8);
     CHECK_NEAR(d.gameplay.fireSeconds, 1.5, 1e-12);
     CHECK_NEAR(d.gameplay.fireChainWindow, 1.0, 1e-12);
-    CHECK_EQ(d.gameplay.powerupTypes, std::string("shield, skip, slim, mend, heat, purge, swift"));
+    CHECK_EQ(d.gameplay.powerupTypes, std::string("shield, skip, slim, mend, heat, purge, swift, gold, ghost"));
     auto ok = loadSettings(IniDocument::parse("[Gameplay]\nfire_meter = 0\nfire_combo = 12\nfire_seconds = 2.5\nfire_chain_window = 0.75\n"));
     CHECK(!ok.settings.gameplay.fireMeter);
     CHECK_EQ(ok.settings.gameplay.fireCombo, 12);

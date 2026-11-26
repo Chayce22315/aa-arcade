@@ -37,6 +37,7 @@ public:
     virtual std::string controllerDbSummary() const = 0;
     virtual void saveBookkeeping() = 0;
     virtual void saveHighScores() = 0;
+    virtual void saveProgress() = 0;
     virtual void requestShutdown() = 0;
     virtual double frameMilliseconds() const = 0;
 };
@@ -68,11 +69,12 @@ public:
     std::optional<render::Vec2> rowPoint(int index) const;
 
 private:
-    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores, PlayerOptions };
+    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Modes, Bookkeeping, HighScores, PlayerOptions, Progress };
     enum class Capture { None, Key, Controller, Keyboard };
 
     void show(PageId id);
     void addFeedbackItems(std::vector<MenuItem>& items);
+    void addLookItems(std::vector<MenuItem>& items, bool unlockedOnly);
     void build(PageId id);
     void close(bool save);
     bool confirm(const std::string& key);

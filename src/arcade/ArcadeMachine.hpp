@@ -12,6 +12,8 @@
 #include "arcade/Credits.hpp"
 #include "arcade/Haptics.hpp"
 #include "arcade/HighScores.hpp"
+#include "audio/MusicSynth.hpp"
+#include "arcade/Progress.hpp"
 #include "arcade/InitialsEntry.hpp"
 #include "arcade/VoteBox.hpp"
 #include "audio/SoundId.hpp"
@@ -28,7 +30,7 @@ namespace spindle::arcade {
 enum class ArcadeState { Attract, InsertCoin, Vote, Playing, Initials, GameOver };
 // Inside Vote: voting (joining still open), the tie-break wheel, then the chosen mode's card.
 enum class VotePhase { Voting, Spin, Intro };
-enum class AttractPage { Title, HowTo, Demo, HighScores };
+enum class AttractPage { Title, WhatsNew, HowTo, Demo, HighScores, Stats };
 
 struct StationButtons {
     int firePresses = 0;
@@ -46,7 +48,7 @@ struct ArcadeInput {
     int serviceCredits = 0;
 };
 
-enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused, Haptic };
+enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused, Haptic, SaveProgress };
 
 struct ArcadeEvent {
     ArcadeEventType type = ArcadeEventType::Sound;
@@ -91,6 +93,11 @@ public:
 
     ArcadeState state() const { return state_; }
     AttractPage attractPage() const { return attractPage_; }
+    // The "what's new" card: shown once, on the first attract loop after `version` changed.
+    void setWhatsNew(std::vector<std::string> lines, std::string version);
+    const std::vector<std::string>& whatsNew() const { return whatsNew_; }
+    const std::string& whatsNewVersion() const { return whatsNewVersion_; }
+    bool whatsNewPending() const { return !whatsNew_.empty() && bookkeeping_.seenVersion != whatsNewVersion_; }
     double stateTime() const { return stateTime_; }
     double pageTime() const { return pageTime_; }
 
@@ -121,6 +128,26 @@ public:
     const bots::BotController* bot(int station) const { return bots_[static_cast<std::size_t>(station)].get(); }
 
     // High scores. The platform loads the tables at boot and tells the machine today's local date.
+    // What the live music should do now: calm on attract, building with the humans' fire meters in a
+    // match, full while one of them is on fire.
+    struct MusicCue {
+        audio::MusicScene scene = audio::MusicScene::Off;
+        float intensity = 0.0f;
+    };
+    MusicCue musicCue() const;
+
+    void setProgress(Progress p) { progress_ = std::move(p); }
+    const Progress& progress() const { return progress_; }
+    Progress& progress() { return progress_; }
+    // The achievement a station just earned, shown in its column for a few seconds.
+    struct Toast {
+        Achievement achievement = Achievement::FirstPin;
+        double timeLeft = 0.0;
+    };
+    const std::optional<Toast>& toast(int station) const { return toasts_[static_cast<std::size_t>(station)]; }
+    static constexpr double kToastSeconds = 3.5;
+    static constexpr double kStatsTime = 9.0;
+
     void setHighScores(HighScores h) { highScores_ = std::move(h); }
     const HighScores& highScores() const { return highScores_; }
     HighScores& highScores() { return highScores_; }
@@ -140,6 +167,7 @@ public:
     // Durations (seconds), exposed for screens and tests.
     static constexpr double kTitleTime = 7.0;
     static constexpr double kHowToTime = 8.0;
+    static constexpr double kWhatsNewTime = 9.0;
     static constexpr double kDemoMaxTime = 50.0;
     static constexpr double kDemoEndHold = 3.0;
     static constexpr double kHighScoresTime = 9.0;
@@ -149,6 +177,8 @@ public:
 private:
     void enter(ArcadeState s);
     void enterAttractPage(AttractPage p);
+    std::vector<std::string> whatsNew_;
+    std::string whatsNewVersion_;
     void startDemo();
     void startMatch(gameplay::ModeId mode);
     void enterVote();
@@ -190,6 +220,13 @@ private:
     std::array<std::unique_ptr<bots::BotController>, gameplay::kMaxStations> bots_{};
     std::optional<MatchResult> lastResult_;
     HighScores highScores_;
+    Progress progress_;
+    std::array<std::optional<Toast>, gameplay::kMaxStations> toasts_{};
+    std::array<std::vector<Achievement>, gameplay::kMaxStations> toastQueue_{};
+    StationProgress stationProgress(int station) const;
+    void earned(int station, const std::vector<Achievement>& list);
+    void updateProgress();
+    void tickToasts(double dt);
     std::array<std::optional<InitialsEntry>, gameplay::kMaxStations> entries_{};
     std::array<bool, gameplay::kMaxStations> entryPending_{}; // knocked out: entry starts when the round end screen is over
     std::array<bool, gameplay::kMaxStations> entryChecked_{}; // this match's score was already offered to the tables

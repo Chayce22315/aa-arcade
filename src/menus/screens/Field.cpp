@@ -85,7 +85,7 @@ void drawFireMeter(const ScreenContext& c, int s, const gameplay::Playfield& f, 
         fill = total > 0.0 ? ticksToSeconds(now, f.fireUntilTick()) / total : 0.0;
     }
     const float flick = burning ? 1.0f + 0.06f * std::sin(static_cast<float>(c.time) * 31.0f) : 1.0f;
-    if (c.flame) {
+    if (c.flame && !lookOn(c, arcade::Look::BlueFlames)) {
         c.r.sprite(c.flame, {base.x, base.y - h * 0.5f}, w, h, 0.0f, Color{0.5f, 0.5f, 0.5f, 0.42f});
         if (fill > 0.0) {
             const float fh = h * static_cast<float>(fill);
@@ -95,10 +95,10 @@ void drawFireMeter(const ScreenContext& c, int s, const gameplay::Playfield& f, 
         }
     } else {
         c.r.ring({base.x, base.y - h * 0.45f}, w * 0.42f, px(c, 1.5f), colors::kDim);
-        if (fill > 0.0) c.r.fillCircle({base.x, base.y - h * 0.45f}, w * 0.42f * static_cast<float>(fill), kFire);
+        if (fill > 0.0) c.r.fillCircle({base.x, base.y - h * 0.45f}, w * 0.42f * static_cast<float>(fill), fireColor(c));
     }
     if (burning) {
-        c.r.text("fire", {base.x + px(c, 34), base.y - px(c, 56)}, capPx(c, 22), kFire);
+        c.r.text("fire", {base.x + px(c, 34), base.y - px(c, 56)}, capPx(c, 22), fireColor(c));
     } else if (f.combo() > 0) {
         c.r.text(std::format("x{}", f.combo()), {base.x + px(c, 34), base.y - px(c, 56)}, capPx(c, 22), colors::kWhite);
         // The chain: a bar that runs out if the next needle is too slow.
@@ -186,24 +186,40 @@ void drawField(const ScreenContext& c, int s, const gameplay::Match& m, const St
         const Vec2 p = onCircle(b.angle);
         const float a = static_cast<float>(b.angle + angle) + std::numbers::pi_v<float> * 0.5f;
         flame(c, p, px(c, 34) * (1.0f + k), px(c, 60) * (0.6f + k), a, colors::kWhite.withAlpha(1.0f - k));
-        c.r.ring(p, px(c, ball * (1.0f + 2.2f * k)), px(c, 2.0f), kFire.withAlpha(1.0f - k));
+        c.r.ring(p, px(c, ball * (1.0f + 2.2f * k)), px(c, 2.0f), fireColor(c).withAlpha(1.0f - k));
     }
     for (std::size_t i = 0; i < f.flying().size(); ++i) {
         const auto& fl = f.flying()[i];
         const Vec2 p{centre.x, centre.y + px(c, static_cast<float>(fl.distance))};
         const bool hit = f.status() == gameplay::FieldStatus::Failed && f.conflictFlying() && *f.conflictFlying() == i;
         if (fl.fire) flame(c, p, px(c, ball * 2.6f), px(c, ball * 5.5f), std::numbers::pi_v<float>, colors::kWhite);
-        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fl.fire ? kFireHot : fg, !hit);
+        if (fl.ghost) c.r.ring(p, px(c, ball * 1.7f), px(c, 1.5f), fg.withAlpha(0.5f));
+        if (lookOn(c, arcade::Look::Trails)) // a comet tail back towards the launcher
+            for (int k = 1; k <= 5; ++k) {
+                const float back = static_cast<float>(k) * ball * 1.15f;
+                if (fl.distance + static_cast<double>(back) > geom::kLaunchDistance) break;
+                c.r.fillCircle({p.x, p.y + px(c, back)}, px(c, ball * (1.0f - 0.14f * static_cast<float>(k))),
+                               (fl.fire ? fireHotColor(c) : fg).withAlpha(0.42f - 0.07f * static_cast<float>(k)));
+            }
+        drawBall(c, p, ball, fl.number, hit ? Color{1.0f, 0.35f, 0.35f, 1.0f} : fl.fire ? fireHotColor(c) : fl.ghost ? fg.withAlpha(0.45f) : fg, !hit);
         if (hit) cross(c, p, px(c, ball));
     }
     // Waiting needles: the next one sits at the launcher, the rest queue below it.
     const int left = f.needlesLeft();
     const int shown = std::min(left, 10);
-    const Color next = f.onFire(now) ? kFireHot : fg; // launched now, it would be a fire needle
+    // Launched now, it would be a fire needle (or a ghost, when a ghost ring is armed).
+    const Color next = f.onFire(now) ? fireHotColor(c) : f.ghostArmed() ? fg.withAlpha(0.45f) : fg;
     for (int k = 0; k < shown; ++k) {
         const float y = static_cast<float>(geom::kLaunchDistance + geom::kQueueSpacing * k);
         const Color col = k == 0 ? next : fg.withAlpha(std::max(0.25f, 1.0f - 0.07f * static_cast<float>(k)));
+        if (k == 0 && f.ghostArmed() && !f.onFire(now)) c.r.ring({centre.x, centre.y + px(c, y)}, px(c, ball * 1.7f), px(c, 1.5f), fg.withAlpha(0.5f));
         drawBall(c, {centre.x, centre.y + px(c, y)}, ball, left - k, col, true);
+    }
+    // Gold: a gold halo around the core that shrinks away with the time left.
+    if (f.gold(now)) {
+        const double goldLeft = ticksToSeconds(now, f.goldUntilTick());
+        const float k = static_cast<float>(std::clamp(goldLeft / gameplay::powerup::kGoldSeconds, 0.0, 1.0));
+        c.r.ring(centre, core + px(c, 14.0f + 10.0f * k), px(c, 2.5f), kGold.withAlpha(0.35f + 0.65f * k));
     }
     // Shield: a halo around the core while armed, a burst when it saves a needle.
     if (f.shieldArmed()) c.r.ring(centre, core + px(c, 9), px(c, 2.2f), fg);
@@ -334,7 +350,7 @@ void drawMatch(const ScreenContext& c, const gameplay::Match& m, bool demo) {
                 drawStationStatus(c, s, std::to_string(n), colors::kWhite, 34);
             }
         } else if (f.onFire(now)) {
-            drawStationStatus(c, s, "on fire!", kFire, 28);
+            drawStationStatus(c, s, "on fire!", fireColor(c), 28);
         } else if (f.lastClaim() && now >= f.lastClaimTick() &&
                    static_cast<double>(now - f.lastClaimTick()) * geom::kTickSeconds < 0.9) {
             drawStationStatus(c, s, powerupLabel(*f.lastClaim()), colors::kWhite, 26);

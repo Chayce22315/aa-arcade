@@ -17,7 +17,7 @@ aa2 or any other title.
   No desktop main menu, no player pause menu, no quit item.
 - **Four stations** in fixed screen columns. One human is singleplayer, two or more is multiplayer, and
   bots (Lua, sandboxed, same rules as humans) can fill free stations in either mode.
-- **Powerups**: rings on the circle (shield, skip, slim, mend, heat, purge, swift) that you take by
+- **Powerups**: rings on the circle (shield, skip, slim, mend, heat, purge, swift, gold, ghost) that you take by
   landing a needle on them. Same rings for everyone, effects only for whoever takes them, none in
   sudden death ([docs/RULES.md](docs/RULES.md#powerups)).
 - **Fire meter**: quick needles fill your flame and close calls count double; when it is full you are
@@ -33,6 +33,10 @@ aa2 or any other title.
 - **Phones and tablets**: Android and iOS builds of the same game. Tap your column to join and to fire
   (anywhere, when you play alone against bots), up to four players around one tablet, pause when the
   app goes to the background, layout kept clear of notches ([docs/BUILDING.md](docs/BUILDING.md#android)).
+- **Achievements**: 14 for the machine, from "first pin" to "tourist", popping up in your column;
+  three of them unlock looks (blue flames, a royal crown, comet trails) ([docs/RULES.md](docs/RULES.md#achievements)).
+- **Live music**: synthesized as it plays, calm on attract and building with the players' fire meters
+  ([docs/SETTINGS.md](docs/SETTINGS.md#audio)).
 - **Feel**: phones vibrate (Android and iPhone) and gamepads rumble for each player's own moments:
   needles, close calls, fails, fire, clears, the crown ([docs/SETTINGS.md](docs/SETTINGS.md#feedback)).
 - **Input**: built-in, USB and Bluetooth keyboards (optionally one keyboard per station), Xbox,
@@ -63,6 +67,7 @@ button or shoulder fires, Start joins, Back inserts a coin, the d-pad or left st
 | `settings.ini` | operator settings, created with comments on first start ([docs/SETTINGS.md](docs/SETTINGS.md)) |
 | `bookkeeping.ini` | coin and game counters, recent winners |
 | `highscores.ini` | the high score tables (all time and today) |
+| `progress.ini` | lifetime stats, achievements and the looks they unlock |
 | `logs/spindle.log` | boot steps, warnings and errors |
 | `gamecontrollerdb.txt` | optional, downloaded and verified automatically |
 

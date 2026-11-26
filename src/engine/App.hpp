@@ -63,6 +63,7 @@ public:
     std::string controllerDbSummary() const override;
     void saveBookkeeping() override;
     void saveHighScores() override;
+    void saveProgress() override;
     void requestShutdown() override { requestQuit(0); }
     double frameMilliseconds() const override { return frameMs_; }
 
@@ -128,6 +129,7 @@ private:
     double frameMs_ = 0.0;
     double exitHeld_ = 0.0;
     double clockSeconds_ = 0.0;
+    bool progressDirty_ = false;
     int screenSaverAllowed_ = -1; // last state set on a phone (-1 = not yet)
 
     friend class SelfTest;

@@ -9,6 +9,7 @@
 #include "collision/Collision.hpp"
 #include "config/AtomicFile.hpp"
 #include "engine/App.hpp"
+#include "engine/Branding.hpp"
 #include "engine/Log.hpp"
 #include "gameplay/Geometry.hpp"
 
@@ -311,6 +312,15 @@ void SelfTest::build() {
     waitFor("attract: title page", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::Title; }, 5);
     add("let the screen open (01_attract_title)", settle(1.6)); // the iris and any intro animation
     shot("01_attract_title");
+    // A fresh install has not seen this version's card yet: it comes once, after the title.
+    waitFor("attract: what's new page (once per version)", [A] { return A().attractPage() == AttractPage::WhatsNew; }, 12);
+    add("let the lines pop in (25_whats_new)", settle(3.0));
+    shot("25_whats_new");
+    add("attract: the card is remembered as seen", [this, A] {
+        check(A().bookkeeping().seenVersion == kVersion, std::format("seen version '{}'", A().bookkeeping().seenVersion));
+        check(!A().whatsNewPending(), "what's new still pending");
+        return true;
+    });
     waitFor("attract: how-to page", [A] { return A().attractPage() == AttractPage::HowTo; }, 12);
     add("let the screen open (02_attract_howto)", settle(0.8)); // the iris and any intro animation
     shot("02_attract_howto");
@@ -558,6 +568,20 @@ void SelfTest::build() {
             120);
     add("attract: let the table draw", settle(0.5));
     shot("21_high_scores");
+    waitFor("attract: this machine's stats come next", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::Stats; },
+            15);
+    add("attract: the four-station match counted, first pin earned", [this, A] {
+        const auto& p = A().progress();
+        check(p.stats().matches >= 1, std::format("matches {}", p.stats().matches));
+        check(p.stats().needles > 0, "no needles counted");
+        check(p.earned(arcade::Achievement::FirstPin), "first pin not earned");
+        check(p.earned(arcade::Achievement::OnTheBoard), "on the board not earned (ACE was saved)");
+        std::error_code ec;
+        check(std::filesystem::exists(app_.paths().progress(), ec), "progress.ini not written");
+        return true;
+    });
+    add("attract: let the stats draw", settle(0.5));
+    shot("26_stats");
     add("controllers: unplug all", once([this] {
         for (int s = 1; s < 4; ++s) detach(s);
     }));

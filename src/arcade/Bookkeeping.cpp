@@ -1,5 +1,7 @@
 #include "arcade/Bookkeeping.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <format>
 
@@ -23,7 +25,11 @@ void Bookkeeping::addWinner(const WinnerRecord& w) {
     if (recentWinners.size() > kMaxRecent) recentWinners.resize(kMaxRecent);
 }
 
-void Bookkeeping::clearCounters() { *this = Bookkeeping{}; }
+void Bookkeeping::clearCounters() {
+    std::string seen = std::move(seenVersion);
+    *this = Bookkeeping{};
+    seenVersion = std::move(seen);
+}
 
 std::string Bookkeeping::serialize() const {
     std::string out = "; spindle bookkeeping (written by the game; clear it from the service menu)\n[Counters]\n";
@@ -35,6 +41,7 @@ std::string Bookkeeping::serialize() const {
         const WinnerRecord& w = recentWinners[i];
         out += std::format("winner{} = {},{},{}\n", i + 1, w.station + 1, w.bot ? "bot" : "human", w.round);
     }
+    if (!seenVersion.empty()) out += std::format("\n[Machine]\nseen_version = {}\n", seenVersion);
     return out;
 }
 
@@ -47,6 +54,12 @@ Bookkeeping Bookkeeping::parse(const config::IniDocument& doc) {
     b.humanWins = readCounter(doc, "human_wins");
     b.botWins = readCounter(doc, "bot_wins");
     b.playSeconds = readCounter(doc, "play_seconds");
+    if (auto v = doc.get("Machine", "seen_version")) {
+        const std::string_view t = config::trim(*v);
+        // A version string only: digits, dots and letters, at most 32 characters.
+        if (t.size() <= 32 && std::all_of(t.begin(), t.end(), [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '.' || ch == '-'; }))
+            b.seenVersion = std::string(t);
+    }
     for (std::size_t i = 0; i < kMaxRecent; ++i) {
         auto v = doc.get("RecentWinners", std::format("winner{}", i + 1));
         if (!v) break;

@@ -5,7 +5,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "16.4" CACHE STRING "Minimum iOS version")
 endif()
 
-project(spindle VERSION 1.0.0 LANGUAGES C CXX)
+project(spindle VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -107,7 +107,8 @@ set(SPINDLE_EMBEDDED_FILES
   audio/wheel_tick.wav
   audio/wheel_stop.wav
   audio/mode_intro.wav
-  art/flame.png)
+  art/flame.png
+  whats_new.txt)
 spindle_embed_files(
   OUTPUT ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data
@@ -124,6 +125,7 @@ add_library(spindle_core STATIC
   src/assets/PngInfo.cpp
   ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
   src/audio/Wav.cpp
+  src/audio/MusicSynth.cpp
   src/collision/Collision.cpp
   src/scripting/LuaSandbox.cpp
   src/gameplay/Powerups.cpp
@@ -141,6 +143,7 @@ add_library(spindle_core STATIC
   src/arcade/Credits.cpp
   src/arcade/Bookkeeping.cpp
   src/arcade/HighScores.cpp
+  src/arcade/Progress.cpp
   src/arcade/InitialsEntry.cpp
   src/arcade/VoteBox.cpp
   src/arcade/ArcadeMachine.cpp
@@ -245,6 +248,8 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestMatch.cpp
     tests/TestScoring.cpp
     tests/TestHighScores.cpp
+    tests/TestProgress.cpp
+    tests/TestMusic.cpp
     tests/TestInitials.cpp
     tests/TestModes.cpp
     tests/TestVote.cpp

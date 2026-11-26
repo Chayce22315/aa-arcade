@@ -47,6 +47,7 @@ struct FlyingNeedle {
     double distance = 0.0; // below the circle centre
     int number = 0;        // the countdown number it carried in the queue
     bool fire = false;     // launched while the station was on fire: burns through other needles
+    bool ghost = false;    // launched with a ghost ring armed: touches nothing, sticks wherever it lands
 };
 
 struct PickupState {
@@ -105,6 +106,9 @@ public:
     bool shieldArmed() const { return shield_; }
     bool slim() const { return slim_; }
     bool swift() const { return swift_; }
+    bool ghostArmed() const { return ghost_; }             // the next needle fired will be a ghost
+    bool gold(std::uint64_t tick) const { return goldUntil_ > tick; }
+    std::uint64_t goldUntilTick() const { return goldUntil_; }
     std::optional<PowerupKind> lastClaim() const { return lastClaim_; }
     std::uint64_t lastClaimTick() const { return lastClaimTick_; }
     std::uint64_t shieldBreakTick() const { return shieldBreakTick_; }
@@ -141,7 +145,7 @@ private:
     void claimAt(double relAngle, std::uint64_t tick);
     void burn(std::size_t attachedIndex, std::uint64_t tick);
     void ignite(std::uint64_t tick);
-    void scorePlacement(double nearestGap, std::uint64_t tick);
+    void scorePlacement(double nearestGap, std::uint64_t tick, bool ghost);
 
     FieldConfig config_{};
     FieldStatus status_ = FieldStatus::Idle;
@@ -166,6 +170,8 @@ private:
     bool shield_ = false;
     bool slim_ = false;
     bool swift_ = false;
+    bool ghost_ = false;
+    std::uint64_t goldUntil_ = 0;
     int claimed_ = 0;
     std::optional<PowerupKind> lastClaim_;
     std::uint64_t lastClaimTick_ = 0;

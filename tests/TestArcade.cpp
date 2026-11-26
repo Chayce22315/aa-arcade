@@ -373,3 +373,86 @@ TEST_CASE(arcade_haptic_patterns_are_short_and_bounded) {
     }
     CHECK(arcade::hapticPattern(HapticKind::Crown).doublePulse);
 }
+
+TEST_CASE(arcade_whats_new_shows_once_per_version_after_the_title) {
+    gameplay::LevelScript levels;
+    ArcadeMachine m(testSettings(), levels, factory(), {}, 3);
+    m.setWhatsNew({"gold and ghost rings"}, "9.9.9");
+    CHECK(m.whatsNewPending());
+    ticks(m, static_cast<int>(ArcadeMachine::kTitleTime * kSecond) + 2);
+    CHECK(m.attractPage() == arcade::AttractPage::WhatsNew);
+    CHECK_EQ(m.bookkeeping().seenVersion, std::string("9.9.9"));
+    CHECK(!m.whatsNewPending());
+    bool saved = false;
+    for (const auto& e : m.takeEvents()) saved |= e.type == arcade::ArcadeEventType::SaveBookkeeping;
+    CHECK(saved);
+    ticks(m, static_cast<int>(ArcadeMachine::kWhatsNewTime * kSecond) + 2);
+    CHECK(m.attractPage() == arcade::AttractPage::HowTo);
+    // Seen: the next loop goes straight from the title to how to play.
+    arcade::Bookkeeping bk = arcade::Bookkeeping::parse(config::IniDocument::parse(m.bookkeeping().serialize()));
+    CHECK_EQ(bk.seenVersion, std::string("9.9.9"));
+    bk.clearCounters();
+    CHECK_EQ(bk.seenVersion, std::string("9.9.9")); // clearing the counters does not bring the card back
+    ArcadeMachine again(testSettings(), levels, factory(), bk, 3);
+    again.setWhatsNew({"gold and ghost rings"}, "9.9.9");
+    ticks(again, static_cast<int>(ArcadeMachine::kTitleTime * kSecond) + 2);
+    CHECK(again.attractPage() == arcade::AttractPage::HowTo);
+}
+
+TEST_CASE(arcade_humans_earn_achievements_in_their_column_and_the_demo_never_does) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.bots.singleplayerBots = 3;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 11);
+    for (int i = 0; i < 40 * kSecond; ++i) m.tick({});
+    CHECK_EQ(m.progress().earnedCount(), 0); // four CPUs played the demo
+    m.tick(startAt(0));
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    bool saved = false, toasted = false;
+    for (int i = 0; i < 30 * kSecond && !m.progress().earned(arcade::Achievement::FirstPin); ++i) {
+        playTick(m, 0, aimed);
+        for (const auto& e : m.takeEvents()) saved |= e.type == arcade::ArcadeEventType::SaveProgress;
+    }
+    CHECK(m.progress().earned(arcade::Achievement::FirstPin));
+    CHECK(saved);
+    m.tick({});
+    for (int st = 0; st < 4; ++st) {
+        if (m.toast(st)) {
+            CHECK_EQ(st, 0); // only the human's column shows it
+            toasted = m.toast(st)->achievement == arcade::Achievement::FirstPin;
+        }
+    }
+    CHECK(toasted);
+}
+
+TEST_CASE(arcade_music_is_calm_on_attract_and_builds_in_a_match) {
+    gameplay::LevelScript levels;
+    config::Settings s = testSettings();
+    s.bots.singleplayerBots = 3;
+    s.arcade.freePlay = true;
+    ArcadeMachine m(s, levels, factory(), {}, 5);
+    m.tick({});
+    CHECK(m.musicCue().scene == audio::MusicScene::Attract);
+    m.tick(startAt(0));
+    CHECK(m.musicCue().scene == audio::MusicScene::Match);
+    voteBattleAndPlay(m, {0});
+    REQUIRE(m.state() == ArcadeState::Playing);
+    float lowest = 1.0f, highest = 0.0f;
+    for (int i = 0; i < 40 * kSecond && m.match()->round() == 1; ++i) {
+        playTick(m, 0, aimed);
+        if (m.match()->phase() == gameplay::MatchPhase::Playing) {
+            lowest = std::min(lowest, m.musicCue().intensity);
+            highest = std::max(highest, m.musicCue().intensity);
+        }
+    }
+    CHECK(lowest >= 0.4f);
+    CHECK(highest > lowest); // the human's combo filled the meter a little
+    config::Settings quiet = s;
+    quiet.audio.attractSound = false;
+    m.applySettings(quiet);
+    ArcadeMachine silent(quiet, levels, factory(), {}, 5);
+    silent.tick({});
+    CHECK(silent.musicCue().scene == audio::MusicScene::Off);
+}

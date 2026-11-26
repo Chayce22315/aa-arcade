@@ -196,3 +196,21 @@ Pads are looked up again for each pulse, so a pad unplugged in the middle of a d
 **CPUs have names from the bot script.** Each difficulty in `bot.lua` lists a `names` pool; the bot's
 seed picks one, so the same seed always gives the same name. Names are sanitised to lowercase letters
 and digits (10 at most), and a script without names falls back to `cpu`.
+
+**Achievements belong to the cabinet.** There are no accounts and initials are not identities, so the
+stats and achievements are the machine's, kept apart from the operator's bookkeeping in `progress.ini`.
+They are checked every tick from the match's own participant numbers, so a pop-up appears the moment a
+threshold is crossed. The plan's third look was an inverted theme; it became comet trails instead,
+because inverting means re-colouring every screen while the three looks now each touch one drawing
+(the flames, the crown, needles in flight). A hand-edited `progress.ini` cannot switch on a look whose
+achievement is not earned.
+
+**"What's new" is shown once per version.** The card's lines are embedded (`data/whats_new.txt`) and the
+version that was shown is kept in `bookkeeping.ini`, where clearing the counters leaves it alone.
+
+**The music is synthesized live.** A step sequencer with five layers (pad, bass, kick and snare, hats,
+lead) renders in the audio callback, so it costs no WAV loops in the executable and reacts the moment a
+player catches fire. The arcade machine only says where the music should head (`musicCue`: a scene and
+an intensity from the humans' fire meters); the synth fades its layers towards that. It is pure code,
+so the tests render it to check it never clips and stays finite. The sound itself is a starting point
+to be tuned by ear.

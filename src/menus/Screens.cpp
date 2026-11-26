@@ -48,12 +48,14 @@ void drawArcade(const ScreenContext& c) {
     case arcade::ArcadeState::Attract:
         switch (a.attractPage()) {
         case arcade::AttractPage::Title: drawTitle(c); break;
+        case arcade::AttractPage::WhatsNew: drawWhatsNew(c); break;
         case arcade::AttractPage::HowTo: drawHowTo(c); break;
         case arcade::AttractPage::Demo:
             dividers(c);
             if (const gameplay::Match* m = a.match()) drawMatch(c, *m, true);
             break;
         case arcade::AttractPage::HighScores: drawHighScores(c); break;
+        case arcade::AttractPage::Stats: drawStats(c); break;
         }
         break;
     case arcade::ArcadeState::InsertCoin: drawInsertCoin(c); break;
@@ -72,6 +74,7 @@ void drawArcade(const ScreenContext& c) {
         break;
     case arcade::ArcadeState::GameOver: drawGameOver(c); break;
     }
+    drawAchievementToasts(c);
     creditLine(c);
     exitHint(c);
     if (c.touchUi) {

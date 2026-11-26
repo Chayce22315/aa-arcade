@@ -146,13 +146,28 @@ void ArcadeMachine::enter(ArcadeState s) {
         joined_.fill(false);
         disconnected_.fill(false);
     }
-    if (s == ArcadeState::Attract) enterAttractPage(AttractPage::Title);
+    if (s == ArcadeState::Attract) {
+        enterAttractPage(AttractPage::Title);
+        for (auto& t : toasts_) t.reset();
+        for (auto& q : toastQueue_) q.clear();
+    }
     log::debug("arcade: state -> {}", arcadeStateName(s));
+}
+
+void ArcadeMachine::setWhatsNew(std::vector<std::string> lines, std::string version) {
+    whatsNew_ = std::move(lines);
+    whatsNewVersion_ = std::move(version);
 }
 
 void ArcadeMachine::enterAttractPage(AttractPage p) {
     attractPage_ = p;
     pageTime_ = 0.0;
+    if (p == AttractPage::WhatsNew) { // seen once is enough
+        bookkeeping_.seenVersion = whatsNewVersion_;
+        ArcadeEvent e;
+        e.type = ArcadeEventType::SaveBookkeeping;
+        events_.push_back(e);
+    }
     if (p == AttractPage::Demo) startDemo();
     if (p != AttractPage::Demo) {
         match_.reset();
@@ -254,6 +269,16 @@ void ArcadeMachine::endMatch() {
             ++bookkeeping_.humanWins;
     }
     bookkeeping_.playSeconds += static_cast<std::uint64_t>(matchSeconds_);
+    if (lineup_.humans > 0) {
+        progress_.countMatch();
+        for (int s = 0; s < gameplay::kMaxStations; ++s) {
+            if (lineup_.seats[static_cast<std::size_t>(s)] != players::SeatKind::Human || !match_->participant(s)) continue;
+            const StationProgress sp = stationProgress(s);
+            earned(s, progress_.update(sp));
+            earned(s, progress_.addMatch(sp, match_->participant(s)->roundsCleared));
+        }
+        events_.push_back({ArcadeEventType::SaveProgress, audio::SoundId::Coin, -1});
+    }
     log::info("arcade: match over after round {}: {}", r.finalRound,
               r.winner >= 0 ? "winner P" + std::to_string(r.winner + 1) : std::string("no winner (single participant)"));
     lastResult_ = std::move(r);
@@ -266,6 +291,82 @@ void ArcadeMachine::endMatch() {
     state_ = anyEntering ? ArcadeState::Initials : ArcadeState::GameOver;
     stateTime_ = 0.0;
     entriesDoneTime_ = 0.0;
+}
+
+ArcadeMachine::MusicCue ArcadeMachine::musicCue() const {
+    using audio::MusicScene;
+    if (serviceOpen_) return {MusicScene::Off, 0.0f};
+    switch (state_) {
+    case ArcadeState::Attract:
+    case ArcadeState::InsertCoin:
+    case ArcadeState::GameOver: return {settings_.audio.attractSound || state_ == ArcadeState::GameOver ? MusicScene::Attract : MusicScene::Off, 0.0f};
+    case ArcadeState::Vote: return {MusicScene::Match, 0.3f};
+    case ArcadeState::Initials: return {MusicScene::Match, 0.2f};
+    case ArcadeState::Playing: break;
+    }
+    if (!match_ || suspended_ || pausedForDisconnect()) return {MusicScene::Match, 0.0f};
+    if (match_->phase() == gameplay::MatchPhase::Tally || match_->over()) return {MusicScene::Match, 0.25f};
+    const std::uint64_t now = match_->tickCount();
+    float heat = 0.0f;
+    for (int s = 0; s < gameplay::kMaxStations; ++s) {
+        if (lineup_.seats[static_cast<std::size_t>(s)] != players::SeatKind::Human || !match_->stationInRound(s)) continue;
+        const gameplay::Playfield& f = match_->field(s);
+        if (f.onFire(now)) return {MusicScene::Match, 1.0f};
+        heat = std::max(heat, static_cast<float>(f.comboFill()));
+    }
+    return {MusicScene::Match, 0.4f + 0.38f * heat};
+}
+
+StationProgress ArcadeMachine::stationProgress(int station) const {
+    StationProgress sp;
+    const auto& p = match_->participant(station);
+    if (!p) return sp;
+    sp.mode = currentMode_;
+    sp.round = p->eliminated ? p->eliminatedRound : match_->round();
+    sp.needles = p->totalPlaced;
+    sp.closeCalls = p->closeCalls;
+    sp.ignitions = p->ignitions;
+    sp.crowns = p->crownsWon;
+    sp.rings = p->powerupsClaimed;
+    sp.score = p->score;
+    sp.finished = match_->over();
+    sp.won = sp.finished && match_->winnerStation() == station;
+    int players = 0;
+    for (int s = 0; s < gameplay::kMaxStations; ++s) players += match_->participant(s) ? 1 : 0;
+    const gameplay::ModeRules rules = gameplay::modeRules(currentMode_);
+    sp.flawless = sp.won && players >= 2 && rules.knockouts && !rules.teams && p->tries >= match_->config().tries;
+    return sp;
+}
+
+void ArcadeMachine::earned(int station, const std::vector<Achievement>& list) {
+    if (list.empty()) return;
+    for (Achievement a : list) {
+        log::info("arcade: P{} earned '{}'", station + 1, achievementInfo(a).name);
+        if (station >= 0 && station < gameplay::kMaxStations) toastQueue_[static_cast<std::size_t>(station)].push_back(a);
+    }
+    sound(audio::SoundId::Powerup);
+    events_.push_back({ArcadeEventType::SaveProgress, audio::SoundId::Coin, station});
+}
+
+void ArcadeMachine::updateProgress() {
+    if (!match_) return;
+    for (int s = 0; s < gameplay::kMaxStations; ++s)
+        if (lineup_.seats[static_cast<std::size_t>(s)] == players::SeatKind::Human && match_->participant(s))
+            earned(s, progress_.update(stationProgress(s)));
+}
+
+void ArcadeMachine::tickToasts(double dt) {
+    for (std::size_t i = 0; i < toasts_.size(); ++i) {
+        auto& t = toasts_[i];
+        if (t) {
+            t->timeLeft -= dt;
+            if (t->timeLeft <= 0.0) t.reset();
+        }
+        if (!t && !toastQueue_[i].empty()) {
+            t = Toast{toastQueue_[i].front(), kToastSeconds};
+            toastQueue_[i].erase(toastQueue_[i].begin());
+        }
+    }
 }
 
 bool ArcadeMachine::entering(int station) const {
@@ -300,6 +401,8 @@ void ArcadeMachine::tickEntries(const ArcadeInput& input, double dt) {
         if (e->shots() != shotsBefore && !e->done()) sound(audio::SoundId::LetterShot);
         if (e->done()) {
             highScores_.finish(e->token(), e->name());
+            earned(s, progress_.addHighScore());
+            events_.push_back({ArcadeEventType::SaveProgress, audio::SoundId::Coin, s});
             sound(audio::SoundId::InitialsDone);
             events_.push_back({ArcadeEventType::SaveHighScores, audio::SoundId::Coin, s});
             log::info("arcade: station {} saved '{}'{}", s + 1, e->name(), e->timedOut() ? " (time ran out)" : "");
@@ -488,6 +591,7 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
     }
     match_->tick(fire);
     if (!match_->paused() && !demo) matchSeconds_ += gameplay::geom::kTickSeconds;
+    if (!demo) updateProgress();
     tallySounds(demo);
     for (const gameplay::MatchEvent& e : match_->takeEvents()) {
         switch (e.type) {
@@ -535,13 +639,17 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
     stateTime_ += dt;
     pageTime_ += dt;
     for (double& t : needCoin_) t = std::max(0.0, t - dt);
+    tickToasts(dt);
     handleCoins(input);
 
     switch (state_) {
     case ArcadeState::Attract: {
         switch (attractPage_) {
         case AttractPage::Title:
-            if (pageTime_ >= kTitleTime) enterAttractPage(AttractPage::HowTo);
+            if (pageTime_ >= kTitleTime) enterAttractPage(whatsNewPending() ? AttractPage::WhatsNew : AttractPage::HowTo);
+            break;
+        case AttractPage::WhatsNew:
+            if (pageTime_ >= kWhatsNewTime) enterAttractPage(AttractPage::HowTo);
             break;
         case AttractPage::HowTo:
             if (pageTime_ >= kHowToTime) enterAttractPage(AttractPage::Demo);
@@ -550,10 +658,15 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
             tickMatch(input, true);
             if (match_ && match_->over()) demoOverTime_ += dt;
             if (demoOverTime_ >= kDemoEndHold || pageTime_ >= kDemoMaxTime)
-                enterAttractPage(nextAttractTable() ? AttractPage::HighScores : AttractPage::Title);
+                enterAttractPage(nextAttractTable() ? AttractPage::HighScores
+                                 : progress_.stats().matches > 0 ? AttractPage::Stats
+                                                                 : AttractPage::Title);
             break;
         case AttractPage::HighScores:
-            if (pageTime_ >= kHighScoresTime) enterAttractPage(AttractPage::Title);
+            if (pageTime_ >= kHighScoresTime) enterAttractPage(progress_.stats().matches > 0 ? AttractPage::Stats : AttractPage::Title);
+            break;
+        case AttractPage::Stats:
+            if (pageTime_ >= kStatsTime) enterAttractPage(AttractPage::Title);
             break;
         }
         for (int s = 0; s < gameplay::kMaxStations && state_ == ArcadeState::Attract; ++s)

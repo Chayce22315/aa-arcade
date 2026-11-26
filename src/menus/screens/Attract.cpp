@@ -37,7 +37,28 @@ void drawTitle(const ScreenContext& c) {
         }
     }
     textAt(c, kTagline, cx, areaY(c, 372), 22, colors::kDim);
+    textAt(c, std::format("v{}", kVersion), cx, areaY(c, 1010), 14, colors::kFaint);
     if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 900), 40, colors::kWhite);
+}
+
+// Once after an update: what this version brought, one line each, popping in one after another.
+void drawWhatsNew(const ScreenContext& c) {
+    const float cx = midX(c);
+    textAt(c, "what's new", cx, areaY(c, 110), 48, colors::kWhite);
+    textAt(c, std::format("v{}", c.arcade.whatsNewVersion()), cx, areaY(c, 182), 20, kGold);
+    const auto& lines = c.arcade.whatsNew();
+    const double t = c.arcade.pageTime();
+    float y = 270.0f;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        const double at = 0.3 + 0.25 * static_cast<double>(i);
+        if (t < at) break;
+        const float k = static_cast<float>(std::clamp((t - at) / 0.25, 0.0, 1.0));
+        const float cap = fitCap(lines[i], px(c, 1500), capPx(c, 22));
+        c.r.fillCircle({cx - px(c, 790), areaY(c, y) + cap * 0.5f}, px(c, 6), kGold.withAlpha(k));
+        c.r.text(lines[i], {cx - px(c, 760), areaY(c, y)}, cap, colors::kWhite.withAlpha(k), Align::Left);
+        y += 66.0f;
+    }
+    if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 960), 32, colors::kWhite);
 }
 
 namespace {
@@ -153,6 +174,72 @@ void drawHighScores(const ScreenContext& c) {
     drawTable(c, t.allTime, cx - px(c, 430), 240.0f, "all time", "no scores yet");
     drawTable(c, t.today, cx + px(c, 430), 240.0f, "today", "no scores yet today");
     if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 960), 34, colors::kWhite);
+}
+
+// The cabinet's lifetime numbers and its achievements (earned in gold, the rest dim).
+void drawStats(const ScreenContext& c) {
+    const float cx = midX(c);
+    const auto& p = c.arcade.progress();
+    const auto& st = p.stats();
+    textAt(c, "this machine", cx, areaY(c, 90), 48, colors::kWhite);
+    textAt(c, std::format("{} of {} achievements", p.earnedCount(), arcade::kAchievementCount), cx, areaY(c, 168), 20, colors::kDim);
+    const std::pair<const char*, std::string> rows[] = {
+        {"games played", std::to_string(st.matches)},     {"needles placed", std::to_string(st.needles)},
+        {"rounds cleared", std::to_string(st.roundsCleared)}, {"close calls", std::to_string(st.closeCalls)},
+        {"times on fire", std::to_string(st.fires)},      {"crowns taken", std::to_string(st.crowns)},
+        {"best score", std::to_string(st.bestScore)},     {"best round", std::to_string(st.bestRound)},
+    };
+    float y = 250.0f;
+    const float left = cx - px(c, 820), mid = cx - px(c, 260);
+    for (const auto& [label, value] : rows) {
+        c.r.text(label, {left, areaY(c, y)}, capPx(c, 22), colors::kDim, Align::Left);
+        c.r.text(value, {mid, areaY(c, y)}, capPx(c, 24), colors::kWhite, Align::Right);
+        y += 62.0f;
+    }
+    // Achievements: two columns of names on the right.
+    for (std::size_t i = 0; i < arcade::kAchievementCount; ++i) {
+        const auto a = static_cast<arcade::Achievement>(i);
+        const bool got = p.earned(a);
+        const float x = cx + px(c, i < 7 ? -120.0f : 400.0f);
+        const float yy = areaY(c, 250.0f + 62.0f * static_cast<float>(i % 7));
+        const Color col = got ? kGold : colors::kFaint;
+        if (got)
+            c.r.fillCircle({x, yy + capPx(c, 20) * 0.5f}, px(c, 7), col);
+        else
+            c.r.ring({x, yy + capPx(c, 20) * 0.5f}, px(c, 7), px(c, 1.5f), col);
+        c.r.text(arcade::achievementInfo(a).name, {x + px(c, 24), yy}, capPx(c, 20), got ? colors::kWhite : colors::kFaint, Align::Left);
+    }
+    if (blink(c.time)) textAt(c, startPrompt(c), cx, areaY(c, 960), 34, colors::kWhite);
+}
+
+// An achievement a player just earned: a gold card low in their column, under the circle and its queue
+// (the header, the status line and the crown stay readable).
+void drawAchievementToasts(const ScreenContext& c) {
+    for (int s = 0; s < gameplay::kMaxStations; ++s) {
+        const auto& t = c.arcade.toast(s);
+        if (!t) continue;
+        const Rect& col = c.layout.columns[static_cast<std::size_t>(s)];
+        const double shown = arcade::ArcadeMachine::kToastSeconds - t->timeLeft;
+        const float in = static_cast<float>(std::clamp(shown / 0.25, 0.0, 1.0));
+        const float out = static_cast<float>(std::clamp(t->timeLeft / 0.4, 0.0, 1.0));
+        const float a = std::min(in, out);
+        const auto info = arcade::achievementInfo(t->achievement);
+        const std::string name(info.name);
+        const std::string unlock = info.unlocks ? std::format("unlocked: {}", arcade::lookName(*info.unlocks)) : std::string();
+        const float w = col.w - px(c, 40), pad = px(c, 10);
+        const float labelCap = capPx(c, 14), nameCap = fitCap(name, w - px(c, 24), capPx(c, 24));
+        const float unlockCap = unlock.empty() ? 0.0f : fitCap(unlock, w - px(c, 24), capPx(c, 15));
+        const float h = pad + labelCap * 1.6f + nameCap * 1.4f + (unlock.empty() ? 0.0f : unlockCap * 1.6f) + pad;
+        const float x = col.x + col.w * 0.5f, y = col.y + px(c, 780) + px(c, 24) * (1.0f - in);
+        c.r.fillRect({x - w * 0.5f, y, w, h}, Color{0.0f, 0.0f, 0.0f, 0.88f * a});
+        frame(c, {x - w * 0.5f, y, w, h}, px(c, 2), kGold.withAlpha(a));
+        float ty = y + pad;
+        c.r.text("achievement", {x, ty}, labelCap, kGold.withAlpha(a), Align::Center);
+        ty += labelCap * 1.6f;
+        c.r.text(name, {x, ty}, nameCap, colors::kWhite.withAlpha(a), Align::Center);
+        ty += nameCap * 1.4f;
+        if (!unlock.empty()) c.r.text(unlock, {x, ty}, unlockCap, kGold.withAlpha(a), Align::Center);
+    }
 }
 
 void drawInsertCoin(const ScreenContext& c) {

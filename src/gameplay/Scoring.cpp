@@ -17,6 +17,7 @@ std::int64_t placementPoints(const Placement& p, int round) {
         mult = 2.0;
     else if (p.fireMeter)
         mult = 1.0 + std::clamp(std::isfinite(p.comboFill) ? p.comboFill : 0.0, 0.0, 1.0);
+    if (p.gold) mult *= 2.0;
     return static_cast<std::int64_t>(std::llround(static_cast<double>(base) * mult));
 }
 

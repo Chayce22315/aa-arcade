@@ -48,6 +48,13 @@ cd android
   it and its passwords safe and out of the repository; losing it means you can never update the app)
   and build with `SPINDLE_KEYSTORE`, `SPINDLE_KEYSTORE_PASSWORD`, `SPINDLE_KEY_ALIAS`,
   `SPINDLE_KEY_PASSWORD` set in the environment.
+- **Signing in CI.** Add four repository secrets (GitHub: Settings, Secrets and variables, Actions):
+  `SPINDLE_KEYSTORE_B64` (the keystore file in base64, e.g. `base64 -w0 spindle.keystore`),
+  `SPINDLE_KEYSTORE_PASSWORD`, `SPINDLE_KEY_ALIAS` and `SPINDLE_KEY_PASSWORD`. The Android job then signs
+  `spindle-android.apk` with that key; without them it keeps using the debug key and says so in its log.
+  An APK signed with your key cannot update one signed with the debug key (Android refuses a different
+  signature): uninstall the debug-signed one once. Each release raises `versionCode` in
+  `android/app/build.gradle` so it installs over the previous one.
 - Install on a phone: `adb install app-release.apk`, or copy the APK over and open it (allow installing
   from that source when Android asks).
 - Run the self-test on a device or emulator: `bash ci/android_selftest.sh app-debug.apk out/` (it starts
@@ -147,7 +154,10 @@ build/core/spindle_tests
 
 `.github/workflows/build.yml` builds with MSVC on `windows-latest`, runs the unit tests, the data checks
 and the headless self-test, and uploads `spindle-windows-x64.zip` and the self-test screenshots as
-artifacts. A second job builds the core on Linux and runs the unit tests.
+artifacts. A second job builds the core on Linux and runs the unit tests. A third builds the whole game on
+Linux (SDL with its X11, Wayland, ALSA and PulseAudio backends, which it loads at run time), runs the
+tests and the headless self-test, and uploads `spindle-linux-x64.tar.gz` (the executable, README, licence
+and docs; it needs a glibc at least as new as the runner's Ubuntu).
 
 The phone jobs: **Android** builds `spindle-android.apk` (release, arm64 + x86_64) with the runner's SDK
 and NDK, then a second job installs the x86_64 debug build on an Android emulator and runs the full

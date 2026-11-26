@@ -1,0 +1,10 @@
+# Shown once on the attract screen after an update (the first lines that are not comments, at most 10).
+scores: every round ends with your total shot into your circle, digit by digit
+the crown: the round's top scorer wears it until someone beats them
+high scores: shoot your initials in, all time and today, for every mode
+nine game modes, chosen by vote: battle, marathon, blitz, race, crown, sabotage, teams, chaos, daily
+new rings: gold (double points) and ghost (a needle that passes through)
+live music that builds as you heat up; phones vibrate and gamepads rumble
+achievements for the machine, with looks to unlock: blue flames, a royal crown, comet trails
+cpus have names now
+clearer screens: animated how to play, result cards, close calls, a 3-2-1

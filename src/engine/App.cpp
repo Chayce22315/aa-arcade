@@ -253,6 +253,11 @@ void App::tick(std::uint64_t tickEndNs) {
         }
     }
     handleArcadeEvents();
+    if (progressDirty_) saveProgress();
+    {
+        const auto cue = arcade_->musicCue();
+        audio_.setMusic(cue.scene, cue.intensity);
+    }
     haptics_.update(SDL_GetTicksNS());
     updateScreenSaver();
 
@@ -282,6 +287,7 @@ void App::handleArcadeEvents() {
         case arcade::ArcadeEventType::Sound: audio_.play(e.sound); break;
         case arcade::ArcadeEventType::SaveBookkeeping: saveBookkeeping(); break;
         case arcade::ArcadeEventType::SaveHighScores: saveHighScores(); break;
+        case arcade::ArcadeEventType::SaveProgress: progressDirty_ = true; break; // once per tick, however many
         case arcade::ArcadeEventType::JoinRefused: audio_.play(audio::SoundId::MenuMove); break;
         default: break;
         }
@@ -368,6 +374,12 @@ void App::previewFeedback(const config::Settings::Feedback& f) {
         if (input_.devices().stationHasController(s)) haptics_.play(arcade::HapticKind::Clear, s, false, now);
     if (touchUi()) haptics_.play(arcade::HapticKind::Clear, -1, true, now);
     haptics_.configure(settings_.feedback); // only a preview: the saved settings stay in force
+}
+
+void App::saveProgress() {
+    progressDirty_ = false;
+    std::string err;
+    if (!config::writeFileAtomic(paths_.progress(), arcade_->progress().serialize(), &err)) log::error("progress: save failed: {}", err);
 }
 
 void App::saveHighScores() {

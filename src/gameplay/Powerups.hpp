@@ -19,12 +19,14 @@ enum class PowerupKind {
     Mend,   // gives back one lost try (never above the starting tries; no effect in sudden death)
     Heat,   // fills the fire meter: the station is on fire at once (only with the fire meter on)
     Purge,  // burns away the pre-placed needles nearest to where the ring was taken
-    Swift   // this station's needles fly faster for the rest of the round
+    Swift,  // this station's needles fly faster for the rest of the round
+    Gold,   // this station's needles score double for a few seconds
+    Ghost   // the next needle this station fires passes through everything and sticks even when it overlaps
 };
 
-inline constexpr std::array<PowerupKind, 7> kAllPowerups{PowerupKind::Shield, PowerupKind::Skip,  PowerupKind::Slim,
+inline constexpr std::array<PowerupKind, 9> kAllPowerups{PowerupKind::Shield, PowerupKind::Skip,  PowerupKind::Slim,
                                                          PowerupKind::Mend,   PowerupKind::Heat,  PowerupKind::Purge,
-                                                         PowerupKind::Swift};
+                                                         PowerupKind::Swift,  PowerupKind::Gold,  PowerupKind::Ghost};
 
 struct Pickup {
     double angle = 0.0; // relative to the rotor, radians
@@ -42,6 +44,8 @@ inline constexpr double kClaimFactor = 0.75;
 inline constexpr double kSwiftFactor = 1.6;
 // Pre-placed needles a purge burns away.
 inline constexpr int kPurgeCount = 2;
+// How long gold doubles the station's needle points. Uncalibrated: tune by feel.
+inline constexpr double kGoldSeconds = 5.0;
 } // namespace powerup
 
 std::string_view powerupName(PowerupKind kind);

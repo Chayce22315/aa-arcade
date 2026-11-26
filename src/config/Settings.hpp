@@ -49,6 +49,7 @@ struct Settings {
         int masterVolume = 80;
         int sfxVolume = 100;
         int uiVolume = 80;
+        int musicVolume = 60;
         bool attractSound = true;
         bool operator==(const Audio&) const = default;
     } audio;
@@ -62,7 +63,7 @@ struct Settings {
         int startRound = 1;
         std::uint32_t seed = 0;
         bool powerups = true;
-        std::string powerupTypes = "shield, skip, slim, mend, heat, purge, swift";
+        std::string powerupTypes = "shield, skip, slim, mend, heat, purge, swift, gold, ghost";
         bool fireMeter = true;
         int fireCombo = 8;
         double fireSeconds = 1.5;

@@ -185,6 +185,20 @@ void drawPowerupIcon(render::Renderer2D& r, gameplay::PowerupKind kind, Vec2 c, 
             r.polyline(chevron, t, col);
         }
         break;
+    case gameplay::PowerupKind::Gold: { // a coin: a filled disc with a notch line
+        r.fillCircle(c, radius * 0.44f, col);
+        r.line({c.x - radius * 0.2f, c.y}, {c.x + radius * 0.2f, c.y}, t, Color{0.0f, 0.0f, 0.0f, 0.7f});
+        break;
+    }
+    case gameplay::PowerupKind::Ghost: { // a dashed ring: something you can pass through
+        constexpr int kDashes = 8;
+        for (int i = 0; i < kDashes; ++i) {
+            const float a0 = kTau * static_cast<float>(i) / kDashes, a1 = a0 + kTau * 0.55f / kDashes;
+            r.line({c.x + radius * 0.46f * std::cos(a0), c.y + radius * 0.46f * std::sin(a0)},
+                   {c.x + radius * 0.46f * std::cos(a1), c.y + radius * 0.46f * std::sin(a1)}, t, col);
+        }
+        break;
+    }
     }
 }
 
@@ -197,6 +211,8 @@ const char* powerupBlurb(gameplay::PowerupKind kind) {
     case gameplay::PowerupKind::Heat: return "on fire at once";
     case gameplay::PowerupKind::Purge: return "burns 2 old needles";
     case gameplay::PowerupKind::Swift: return "faster needles";
+    case gameplay::PowerupKind::Gold: return "double points for 5 s";
+    case gameplay::PowerupKind::Ghost: return "next needle passes through";
     }
     return "";
 }
@@ -210,14 +226,34 @@ const char* powerupLabel(gameplay::PowerupKind kind) {
     case gameplay::PowerupKind::Heat: return "heat";
     case gameplay::PowerupKind::Purge: return "purge";
     case gameplay::PowerupKind::Swift: return "swift";
+    case gameplay::PowerupKind::Gold: return "gold";
+    case gameplay::PowerupKind::Ghost: return "ghost";
     }
     return "";
 }
 
 // A flame standing on `base`, pointing along `angle` (radians, 0 = up the screen, clockwise).
-// Uses data/art/flame.png; if that failed to load, a plain glow stands in.
+bool lookOn(const ScreenContext& c, arcade::Look look) { return c.arcade.progress().lookOn(look); }
+
+namespace {
+constexpr Color kBlueFire{0.3f, 0.62f, 1.0f, 1.0f};
+constexpr Color kBlueFireHot{0.72f, 0.9f, 1.0f, 1.0f};
+} // namespace
+
+Color fireColor(const ScreenContext& c) { return lookOn(c, arcade::Look::BlueFlames) ? kBlueFire : kFire; }
+Color fireHotColor(const ScreenContext& c) { return lookOn(c, arcade::Look::BlueFlames) ? kBlueFireHot : kFireHot; }
+
+// Uses data/art/flame.png; if that failed to load, a plain glow stands in. Blue flames are drawn from
+// circles (tinting the orange image cannot make it blue).
 void flame(const ScreenContext& c, Vec2 base, float w, float h, float angle, Color tint) {
     const Vec2 up{std::sin(angle), -std::cos(angle)};
+    if (lookOn(c, arcade::Look::BlueFlames)) {
+        const float flick = 1.0f + 0.08f * std::sin(static_cast<float>(c.time) * 27.0f + base.x * 0.05f);
+        c.r.fillCircle({base.x + up.x * h * 0.22f, base.y + up.y * h * 0.22f}, w * 0.36f, kBlueFire.withAlpha(tint.a * 0.75f));
+        c.r.fillCircle({base.x + up.x * h * 0.45f * flick, base.y + up.y * h * 0.45f * flick}, w * 0.25f, kBlueFire.withAlpha(tint.a * 0.9f));
+        c.r.fillCircle({base.x + up.x * h * 0.66f * flick, base.y + up.y * h * 0.66f * flick}, w * 0.14f, kBlueFireHot.withAlpha(tint.a));
+        return;
+    }
     if (c.flame) {
         c.r.sprite(c.flame, {base.x + up.x * h * 0.5f, base.y + up.y * h * 0.5f}, w, h, angle, tint);
         return;
@@ -260,8 +296,14 @@ void drawCrown(const ScreenContext& c, Vec2 base, float size, Color col) {
     const Vec2 zig[] = {{x0, base.y}, {x0, base.y - h * 0.7f}, {x0 + w * 0.25f, base.y - h * 0.32f}, {base.x, base.y - h},
                         {x1 - w * 0.25f, base.y - h * 0.32f}, {x1, base.y - h * 0.7f}, {x1, base.y}};
     c.r.polyline(zig, t, col);
+    const bool royal = lookOn(c, arcade::Look::RoyalCrown);
+    if (royal) { // a velvet cap inside the points and coloured jewels on the band
+        c.r.fillCircle({base.x, base.y - h * 0.3f}, w * 0.26f, Color{0.55f, 0.12f, 0.6f, 0.85f * col.a});
+        const Color gems[3] = {{0.95f, 0.2f, 0.3f, col.a}, {0.25f, 0.85f, 0.45f, col.a}, {0.3f, 0.55f, 1.0f, col.a}};
+        for (int i = 0; i < 3; ++i) c.r.fillCircle({x0 + w * (0.25f + 0.25f * static_cast<float>(i)), base.y}, t * 1.1f, gems[i]);
+    }
     for (Vec2 tip : {Vec2{x0, base.y - h * 0.7f}, Vec2{base.x, base.y - h}, Vec2{x1, base.y - h * 0.7f}})
-        c.r.fillCircle({tip.x, tip.y - t * 0.6f}, t * 1.25f, col);
+        c.r.fillCircle({tip.x, tip.y - t * 0.6f}, t * 1.25f, royal ? colors::kWhite.withAlpha(col.a) : col);
 }
 
 void frame(const ScreenContext& c, const Rect& r, float t, Color col) {
