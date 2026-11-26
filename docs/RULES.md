@@ -129,10 +129,72 @@ when empty and fills with colour from the bottom as the combo grows.
 - Bots fill the meter by the same rule. When they catch fire they press fire at a human-like mashing
   rate (`mash` in the bot profiles), never faster than a person could.
 
+## Score
+
+Every player builds a score over the match. Scores are hidden while a round is played; the round end
+screen reveals them. All values are uncalibrated (tune by feel); R is the round number.
+
+| Earned while playing (round points) | Points |
+|---|---|
+| a needle placed | 10 x R |
+| a close call (the fire meter's rule: within 1.4x the minimum gap) | +5 x R |
+| combo multiplier (fire meter on) | x (1 + the meter's fill before the needle), so x1 to x2 |
+| on fire | x2 (instead of the combo multiplier) |
+| a needle your fire needle or a purge burnt away | +5 x R each |
+| a powerup ring taken | +25 x R |
+
+| Bonus (added at the round end, cleared players only) | Points |
+|---|---|
+| clearing the round | 100 x R |
+| time left on the round clock | +2 x R per whole second |
+| the first clear, when two or more players are in the round (same tick = both) | +50 x R |
+
+Totals are capped at 9,999,999 (seven digits). Bots score by the same rules.
+
+## Round end screen
+
+When a round ends, every circle in it lights up, humans and CPUs alike. Ammo balls carrying the
+digits of each player's new **total** fire into the core, biggest digit first, and type the number in.
+Then three lines slide in under the circle: `total` (all rounds), `round +` (this round's points) and
+`bonus +`. Then the crown moves. Players knocked out in earlier rounds keep showing their final total,
+dimmed. The timeline comes from the core (`gameplay/Scoring.hpp`), so screen, sounds and tests agree.
+`[Gameplay] round_end_screen` picks `full` (about 3 to 4.5 s), `short` (about 2 s) or `off` (a plain
+pause; the numbers appear at once).
+
+## Crown
+
+- The player with the most **round points** (the bonus does not count) wins the round and takes the
+  **crown**: a gold crown next to their station name and a rainbow rim around their circle.
+- It stays with them in later rounds until someone else wins a round outright; that is how players take
+  it during the match. When it changes hands it flies across on the round end screen.
+- **Ties:** nobody new takes it; a holder in the tie keeps it. Nobody takes it with zero points.
+- A holder who is knocked out loses it (it tumbles off); the round's outright winner among the players
+  still in can take it at the same round end.
+- It is cosmetic: no rule, timer or tie-break looks at it.
+
+## High scores
+
+- Each game mode keeps an **all-time** top 10 and a **today** top 10 (today's tables empty themselves
+  when the local date changes). Only humans enter them; a score has to be above zero and beat a row.
+  An equal score ranks below the row already there.
+- **Knocked-out players shoot their initials in their own column while the others play on**, as soon
+  as the round end screen of the round they went out in is over. Survivors and the winner shoot theirs
+  after the last round end screen, before the results.
+- **Shooting initials:** the next ammo ball shows a letter. Left and right turn the letter wheel
+  (`A-Z`, `0-9`, `<` = delete, `end` = done; hold to spin); fire (or start) shoots the letter into the
+  circle. Up to 6 letters; the sixth finishes. `[Arcade] initials_seconds` (15 by default) runs down on
+  a ring around the circle; when it runs out whatever was typed is saved, or the station tag (`P2`) if
+  nothing was.
+- The row is reserved under the station tag the moment a player qualifies, so two players qualifying
+  at once can never push each other out: an unreserved row gives way instead, even one with a slightly
+  higher score.
+- The attract loop shows the tables; the service menu shows and clears them.
+
 ## Standings
 
 The game-over screen ranks players: winner first, then by the round they were eliminated in (later is
 better), then by the tick they failed on (later is better), then by needles placed over the match.
+It shows each player's final score next to their rank.
 
 ## Touch (phones and tablets)
 
@@ -145,6 +207,9 @@ On a phone or tablet the screen is the cabinet: the four stations are its four c
   nothing. Every finger counts on its own, so players can tap at the same time.
 - **Leaving the app** (home button, a call) pauses a running match; it shows `paused` and continues when
   a player taps (that tap does not launch a needle). Rules, timers and tie-breaks are unchanged.
+- **Initials:** a column shooting initials splits into thirds: tap the left third for the previous
+  letter, the right third for the next, the middle to shoot it. When the only human left is entering
+  initials, the whole screen splits that way.
 - The top-left corner is reserved for the operator gesture (see docs/SERVICE_MENU.md).
 
 ## Timing and input

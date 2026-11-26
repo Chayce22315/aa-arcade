@@ -34,6 +34,7 @@ public:
     virtual std::size_t settingsIssueCount() const = 0;
     virtual std::string controllerDbSummary() const = 0;
     virtual void saveBookkeeping() = 0;
+    virtual void saveHighScores() = 0;
     virtual void requestShutdown() = 0;
     virtual double frameMilliseconds() const = 0;
 };
@@ -62,7 +63,7 @@ public:
     std::optional<render::Vec2> rowPoint(int index) const;
 
 private:
-    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Bookkeeping };
+    enum class PageId { Main, InputTest, Assignment, Keybinds, DisplayTest, Video, SoundTest, Volumes, Game, Coin, Bots, Bookkeeping, HighScores };
     enum class Capture { None, Key, Controller, Keyboard };
 
     void show(PageId id);
@@ -104,6 +105,7 @@ private:
     std::string captureLabel_;
     double captureTime_ = 0.0;
     std::string pendingConfirm_;
+    bool rebuildPending_ = false; // rebuild the page on the next update (never from inside one of its items)
     double confirmTime_ = 0.0;
     double backHeld_ = 0.0;
     std::string notice_;

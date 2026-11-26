@@ -148,3 +148,19 @@ leave a running app with nothing on screen after an operator shut-down or a fini
 emulator and the iOS app in a simulator, on every push. Real devices (touch feel, notches, audio
 latency, performance) still have to be checked by hand.
 
+
+**Scores are hidden until the round end.** The round end screen is the reveal: ammo balls type each
+total into its circle. Showing a running score during play would spoil that and add another number to
+columns that already carry a queue, a fire meter and a clock.
+
+**The round end screen's timeline lives in the core.** `scoring::tallyTiming` decides when each digit
+lands, when the lines appear and when the crown moves; the screen draws from it, the arcade machine
+times the sounds from it and the tests check it. The match simply stays in its `Tally` phase that long.
+
+**A reserved high score row is never pushed out.** A player who qualifies gets a row under their station
+tag at once and then shoots their initials. If someone else qualifies meanwhile, an unreserved row gives
+way, even one slightly above the reserved row, so nobody types a name into a row that then vanishes.
+Today's tables use the platform's local date, passed in by the app; the core never reads a clock.
+
+**Station keys never auto-repeat; the letter wheel repeats on the tick.** Operating-system key repeat
+would also repeat fire, so `HoldRepeat` (0.35 s, then every 0.09 s) repeats left / right in the core.

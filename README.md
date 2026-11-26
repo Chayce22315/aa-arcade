@@ -23,6 +23,11 @@ aa2 or any other title.
 - **Fire meter**: quick needles fill your flame and close calls count double; when it is full you are
   on fire for 1.5 s and your needles burn through anything they touch
   ([docs/RULES.md](docs/RULES.md#fire-meter)).
+- **Score, round end screen and crown**: every round ends with each total shot into its circle digit
+  by digit, then total / round / bonus; the round's top scorer takes the crown (and a rainbow circle)
+  until someone beats them ([docs/RULES.md](docs/RULES.md#score)).
+- **High scores**: all-time and today tables; knocked-out players shoot their initials into their own
+  column while the others play on, survivors after the last round ([docs/RULES.md](docs/RULES.md#high-scores)).
 - **Phones and tablets**: Android and iOS builds of the same game. Tap your column to join and to fire
   (anywhere, when you play alone against bots), up to four players around one tablet, pause when the
   app goes to the background, layout kept clear of notches ([docs/BUILDING.md](docs/BUILDING.md#android)).
@@ -41,9 +46,10 @@ aa2 or any other title.
 |---|---|---|---|---|
 | Fire | Left Ctrl | A | Right Ctrl | L |
 | Start / join | 1 | 2 | 3 | 4 |
+| Left / right (initials) | W / D | J / K | Left / Right | F / H |
 
 Coin `5`, service coin `9`, service menu `F2`, hold `Escape` (2 s) to quit. Controllers: any face
-button or shoulder fires, Start joins, Back inserts a coin. All of it is configurable in
+button or shoulder fires, Start joins, Back inserts a coin, the d-pad or left stick picks letters. All of it is configurable in
 `settings.ini` or in the service menu.
 
 ## Files next to spindle.exe
@@ -52,6 +58,7 @@ button or shoulder fires, Start joins, Back inserts a coin. All of it is configu
 |---|---|
 | `settings.ini` | operator settings, created with comments on first start ([docs/SETTINGS.md](docs/SETTINGS.md)) |
 | `bookkeeping.ini` | coin and game counters, recent winners |
+| `highscores.ini` | the high score tables (all time and today) |
 | `logs/spindle.log` | boot steps, warnings and errors |
 | `gamecontrollerdb.txt` | optional, downloaded and verified automatically |
 

@@ -94,6 +94,14 @@ set(SPINDLE_EMBEDDED_FILES
   audio/shield.wav
   audio/ignite.wav
   audio/burn.wav
+  audio/tally_tick_1.wav
+  audio/tally_tick_2.wav
+  audio/tally_tick_3.wav
+  audio/tally_tick_4.wav
+  audio/tally_done.wav
+  audio/crown.wav
+  audio/letter_shot.wav
+  audio/initials_done.wav
   art/flame.png)
 spindle_embed_files(
   OUTPUT ${SPINDLE_GENERATED_DIR}/spindle/EmbeddedData.cpp
@@ -119,12 +127,15 @@ add_library(spindle_core STATIC
   src/gameplay/LevelScript.cpp
   src/gameplay/Playfield.cpp
   src/gameplay/MatchRules.cpp
+  src/gameplay/Scoring.cpp
   src/gameplay/Match.cpp
   src/players/PlayerManager.cpp
   src/bots/BotRuntime.cpp
   src/bots/BotController.cpp
   src/arcade/Credits.cpp
   src/arcade/Bookkeeping.cpp
+  src/arcade/HighScores.cpp
+  src/arcade/InitialsEntry.cpp
   src/arcade/ArcadeMachine.cpp
   src/input/Keybinds.cpp
   src/input/TouchZones.cpp
@@ -151,6 +162,13 @@ add_library(spindle_platform STATIC
   src/input/InputSystem.cpp
   src/audio/AudioSystem.cpp
   src/menus/Screens.cpp
+  src/menus/screens/Common.cpp
+  src/menus/screens/Field.cpp
+  src/menus/screens/Tally.cpp
+  src/menus/screens/Initials.cpp
+  src/menus/screens/Attract.cpp
+  src/menus/screens/Lobby.cpp
+  src/menus/screens/Results.cpp
   src/menus/ServiceMenu.cpp)
 target_link_libraries(spindle_platform PUBLIC spindle_core SDL3::SDL3)
 if(WIN32)
@@ -210,6 +228,9 @@ if(SPINDLE_BUILD_TESTS)
     tests/TestMobile.cpp
     tests/TestMatchRules.cpp
     tests/TestMatch.cpp
+    tests/TestScoring.cpp
+    tests/TestHighScores.cpp
+    tests/TestInitials.cpp
     tests/TestPlayerManager.cpp
     tests/TestBots.cpp
     tests/TestCredits.cpp

@@ -165,6 +165,44 @@ def round_start() -> list[float]:
     return tone(lambda t: 880, 0.12, ((1, 1.0), (2, 0.12)), attack=0.004, release=0.05, decay=0.09)
 
 
+def tally_tick(step: int) -> list[float]:
+    # one digit landing in the circle: a short blip that climbs a little with every digit
+    f = 660.0 * (2 ** (step * 3 / 12))
+    return tone(lambda t: f, 0.07, ((1, 1.0), (2, 0.2)), attack=0.002, release=0.03, decay=0.03)
+
+
+def tally_done() -> list[float]:
+    # the number is in: a soft two-note "ding-dong" chord
+    a = tone(lambda t: 784.0, 0.32, ((1, 0.6), (2, 0.15)), attack=0.003, release=0.12, decay=0.18)
+    b = tone(lambda t: 1046.5, 0.32, ((1, 0.5), (2, 0.1)), attack=0.003, release=0.12, decay=0.18)
+    return mix(a, [0.0] * int(0.04 * RATE) + b)
+
+
+def crown() -> list[float]:
+    # the crown lands: a quick rising fanfare with a shimmer on top
+    notes = [659.25, 830.61, 987.77]
+    parts = [tone(lambda t, f=f: f, 0.08, ((1, 1.0), (2, 0.3), (3, 0.12)), attack=0.003, release=0.02) for f in notes]
+    last = tone(lambda t: 1318.5, 0.5, ((1, 1.0), (2, 0.25), (4, 0.08)), attack=0.003, release=0.2, decay=0.35)
+    shimmer = tone(lambda t: 2637.0 + 40 * math.sin(t * 60), 0.5, ((1, 0.25),), attack=0.05, release=0.25, decay=0.3)
+    head = concat(*parts, gap=0.01)
+    return concat(head, mix(last, shimmer))
+
+
+def letter_shot() -> list[float]:
+    # a letter fired into the circle: a falling "pew" then a little thunk
+    pew = tone(lambda t: 1400 - 900 * min(1.0, t / 0.06), 0.07, ((1, 0.8), (2, 0.15)), attack=0.001, release=0.02)
+    thunk = tone(lambda t: 220, 0.05, ((1, 0.8), (3, 0.2)), attack=0.001, release=0.02, decay=0.02)
+    return concat(pew, thunk)
+
+
+def initials_done() -> list[float]:
+    # name saved: a bright little arpeggio
+    notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]
+    parts = [tone(lambda t, f=f: f, 0.07, ((1, 1.0), (2, 0.2)), attack=0.002, release=0.02) for f in notes[:-1]]
+    last = tone(lambda t: notes[-1], 0.3, ((1, 1.0), (2, 0.2)), attack=0.002, release=0.12, decay=0.2)
+    return concat(*parts, last, gap=0.008)
+
+
 RECIPES = {
     "needle_hit": needle_hit,
     "fail": fail,
@@ -179,6 +217,14 @@ RECIPES = {
     "shield": shield,
     "ignite": ignite,
     "burn": burn,
+    "tally_tick_1": lambda: tally_tick(0),
+    "tally_tick_2": lambda: tally_tick(1),
+    "tally_tick_3": lambda: tally_tick(2),
+    "tally_tick_4": lambda: tally_tick(3),
+    "tally_done": tally_done,
+    "crown": crown,
+    "letter_shot": letter_shot,
+    "initials_done": initials_done,
 }
 
 

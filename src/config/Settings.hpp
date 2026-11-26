@@ -16,6 +16,7 @@ enum class Difficulty { Easy, Normal, Hard, Expert };
 enum class AssignmentMode { Auto, Fixed };
 enum class DisconnectAction { Pause, Continue };
 enum class LogLevelSetting { Error, Warn, Info, Debug };
+enum class RoundEndScreen { Full, Short, Off };
 
 struct Resolution {
     bool automatic = true;
@@ -29,6 +30,8 @@ inline constexpr int kStationCount = 4;
 struct StationKeys {
     std::string fire;
     std::string start;
+    std::string left;  // initials letter / vote cursor
+    std::string right;
     bool operator==(const StationKeys&) const = default;
 };
 
@@ -64,6 +67,7 @@ struct Settings {
         int fireCombo = 8;
         double fireSeconds = 1.5;
         double fireChainWindow = 1.0;
+        RoundEndScreen roundEndScreen = RoundEndScreen::Full;
         bool operator==(const Gameplay&) const = default;
     } gameplay;
 
@@ -83,10 +87,11 @@ struct Settings {
         int joinWindow = 10;
         int gameOverTime = 8;
         int exitHoldSeconds = 2;
+        int initialsSeconds = 15;
         bool operator==(const Arcade&) const = default;
     } arcade;
 
-    std::array<StationKeys, kStationCount> stationKeys{{{"LCtrl", "1"}, {"A", "2"}, {"RCtrl", "3"}, {"L", "4"}}};
+    std::array<StationKeys, kStationCount> stationKeys{{{"LCtrl", "1", "W", "D"}, {"A", "2", "J", "K"}, {"RCtrl", "3", "Left", "Right"}, {"L", "4", "F", "H"}}};
 
     struct SystemKeys {
         std::string coin = "5";

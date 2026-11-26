@@ -58,6 +58,8 @@ int InputSystem::configure(const config::Settings& settings) {
         const auto i = static_cast<std::size_t>(s);
         bind(settings.stationKeys[i].fire, defaults.stationKeys[i].fire, Action::Fire, s, std::format("player {} fire", s + 1));
         bind(settings.stationKeys[i].start, defaults.stationKeys[i].start, Action::Start, s, std::format("player {} start", s + 1));
+        bind(settings.stationKeys[i].left, defaults.stationKeys[i].left, Action::Left, s, std::format("player {} left", s + 1));
+        bind(settings.stationKeys[i].right, defaults.stationKeys[i].right, Action::Right, s, std::format("player {} right", s + 1));
     }
     const auto& k = settings.systemKeys;
     const auto& dk = defaults.systemKeys;
@@ -181,6 +183,9 @@ void InputSystem::onGamepadButton(const SDL_GamepadButtonEvent& b) {
     default: break;
     }
     if (nav != Action::Count) push(b.timestamp, nav, -1, b.down);
+    // The d-pad also picks letters and modes for the pad's own station.
+    if (d->station >= 0 && button == SDL_GAMEPAD_BUTTON_DPAD_LEFT) push(b.timestamp, Action::Left, d->station, b.down);
+    if (d->station >= 0 && button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) push(b.timestamp, Action::Right, d->station, b.down);
     if (contains(coinButtons_, button)) push(b.timestamp, Action::Coin, -1, b.down);
     if (contains(startButtons_, button)) {
         if (b.down)
@@ -230,6 +235,33 @@ void InputSystem::onJoystickHat(const SDL_JoyHatEvent& h) {
     edge(SDL_HAT_DOWN, Action::MenuDown);
     edge(SDL_HAT_LEFT, Action::MenuLeft);
     edge(SDL_HAT_RIGHT, Action::MenuRight);
+    if (d->station >= 0) {
+        const auto stationEdge = [&](std::uint8_t mask, Action a) {
+            const bool was = (before & mask) != 0, now = (h.value & mask) != 0;
+            if (was != now) push(h.timestamp, a, d->station, now);
+        };
+        stationEdge(SDL_HAT_LEFT, Action::Left);
+        stationEdge(SDL_HAT_RIGHT, Action::Right);
+    }
+}
+
+void InputSystem::onStick(InputDevice& d, float x, std::uint64_t ts) {
+    // Digital left / right from an analogue axis: press past 0.5, release inside 0.3.
+    constexpr float kPress = 0.5f, kRelease = 0.3f;
+    int dir = d.stickDir;
+    if (dir == 0 && x <= -kPress) dir = -1;
+    else if (dir == 0 && x >= kPress) dir = 1;
+    else if (dir != 0 && x > -kRelease && x < kRelease) dir = 0;
+    else if (dir == -1 && x >= kPress) dir = 1;
+    else if (dir == 1 && x <= -kPress) dir = -1;
+    if (dir == d.stickDir) return;
+    if (d.station >= 0) {
+        if (d.stickDir == -1) push(ts, Action::Left, d.station, false);
+        if (d.stickDir == 1) push(ts, Action::Right, d.station, false);
+        if (dir == -1) push(ts, Action::Left, d.station, true);
+        if (dir == 1) push(ts, Action::Right, d.station, true);
+    }
+    d.stickDir = dir;
 }
 
 void InputSystem::onControllerAdded(InputDevice* d) {
@@ -289,14 +321,18 @@ void InputSystem::handleEvent(const SDL_Event& e) {
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_BUTTON_UP: onGamepadButton(e.gbutton); break;
     case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-        if (InputDevice* d = registry_.find(DeviceKind::Gamepad, e.gaxis.which); d && e.gaxis.axis < SDL_GAMEPAD_AXIS_COUNT)
+        if (InputDevice* d = registry_.find(DeviceKind::Gamepad, e.gaxis.which); d && e.gaxis.axis < SDL_GAMEPAD_AXIS_COUNT) {
             d->axes[e.gaxis.axis] = static_cast<float>(e.gaxis.value) / 32767.0f;
+            if (e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX) onStick(*d, d->axes[e.gaxis.axis], e.gaxis.timestamp);
+        }
         break;
     case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
     case SDL_EVENT_JOYSTICK_BUTTON_UP: onJoystickButton(e.jbutton); break;
     case SDL_EVENT_JOYSTICK_AXIS_MOTION:
-        if (InputDevice* d = registry_.find(DeviceKind::Joystick, e.jaxis.which); d && e.jaxis.axis < d->rawAxes.size())
+        if (InputDevice* d = registry_.find(DeviceKind::Joystick, e.jaxis.which); d && e.jaxis.axis < d->rawAxes.size()) {
             d->rawAxes[e.jaxis.axis] = static_cast<float>(e.jaxis.value) / 32767.0f;
+            if (e.jaxis.axis == 0) onStick(*d, d->rawAxes[0], e.jaxis.timestamp);
+        }
         break;
     case SDL_EVENT_JOYSTICK_HAT_MOTION: onJoystickHat(e.jhat); break;
     case SDL_EVENT_FINGER_DOWN:
@@ -354,17 +390,24 @@ TickInput InputSystem::drain(std::uint64_t untilNs) {
     while (!queue_.empty() && (!useTimestamps_ || queue_.front().timestamp <= untilNs)) {
         const Queued q = queue_.front();
         queue_.pop_front();
+        if (q.station >= 0) tickHeld_[static_cast<std::size_t>(q.station)][static_cast<std::size_t>(q.action)] = q.pressed;
         if (!q.pressed) continue;
         if (q.station >= 0) {
             auto& st = t.arcade.stations[static_cast<std::size_t>(q.station)];
             if (q.action == Action::Fire) ++st.firePresses;
             if (q.action == Action::Start) st.startPressed = true;
+            if (q.action == Action::Left) ++st.leftPresses;
+            if (q.action == Action::Right) ++st.rightPresses;
             t.stationPressed[static_cast<std::size_t>(q.station)][static_cast<std::size_t>(q.action)] = true;
         } else {
             if (q.action == Action::Coin) ++t.arcade.coins;
             if (q.action == Action::ServiceCoin) ++t.arcade.serviceCredits;
             t.systemPressed[static_cast<std::size_t>(q.action)] = true;
         }
+    }
+    for (std::size_t s = 0; s < 4; ++s) {
+        t.arcade.stations[s].leftHeld = tickHeld_[s][static_cast<std::size_t>(Action::Left)];
+        t.arcade.stations[s].rightHeld = tickHeld_[s][static_cast<std::size_t>(Action::Right)];
     }
     t.stationsLost.swap(pendingLost_);
     t.stationsRestored.swap(pendingRestored_);

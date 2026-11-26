@@ -6,6 +6,7 @@
 
 #include "gameplay/LevelDef.hpp"
 #include "gameplay/Powerups.hpp"
+#include "gameplay/Scoring.hpp"
 
 namespace spindle::gameplay {
 
@@ -122,6 +123,8 @@ public:
 
     // Claims, shield breaks, ignitions and burns since the last call (the match turns them into events).
     std::vector<PowerupKind> takeClaims();
+    // How each needle that stuck since the last call landed (the match turns them into points).
+    std::vector<scoring::Placement> takePlacements();
     int takeShieldBreaks();
     int takeIgnitions();
     int takeBurns();
@@ -171,6 +174,7 @@ private:
     std::uint64_t fireUntil_ = 0;
     std::vector<BurnMark> burns_;
     int newIgnitions_ = 0;
+    std::vector<scoring::Placement> newPlacements_;
     int newBurns_ = 0;
     std::uint32_t revision_ = 0;
 };

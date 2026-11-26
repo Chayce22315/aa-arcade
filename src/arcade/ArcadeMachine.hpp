@@ -5,10 +5,13 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "arcade/Bookkeeping.hpp"
 #include "arcade/Credits.hpp"
+#include "arcade/HighScores.hpp"
+#include "arcade/InitialsEntry.hpp"
 #include "audio/SoundId.hpp"
 #include "bots/BotController.hpp"
 #include "config/Settings.hpp"
@@ -18,12 +21,17 @@
 
 namespace spindle::arcade {
 
-enum class ArcadeState { Attract, InsertCoin, Join, Playing, GameOver };
-enum class AttractPage { Title, HowTo, Demo, Winners };
+// Initials: after the last round end screen, players who made a high score table shoot their initials.
+enum class ArcadeState { Attract, InsertCoin, Join, Playing, Initials, GameOver };
+enum class AttractPage { Title, HowTo, Demo, HighScores };
 
 struct StationButtons {
     int firePresses = 0;
     bool startPressed = false;
+    int leftPresses = 0;
+    int rightPresses = 0;
+    bool leftHeld = false; // held at the end of the tick (for hold-to-repeat)
+    bool rightHeld = false;
 };
 
 // One simulation tick worth of cabinet input (edges, not levels).
@@ -33,7 +41,7 @@ struct ArcadeInput {
     int serviceCredits = 0;
 };
 
-enum class ArcadeEventType { Sound, SaveBookkeeping, MatchStarted, MatchEnded, JoinRefused };
+enum class ArcadeEventType { Sound, SaveBookkeeping, SaveHighScores, MatchStarted, MatchEnded, JoinRefused };
 
 struct ArcadeEvent {
     ArcadeEventType type = ArcadeEventType::Sound;
@@ -48,6 +56,7 @@ struct MatchResult {
     std::vector<int> standings;
     int finalRound = 0;
     std::array<int, gameplay::kMaxStations> roundsCleared{};
+    std::array<std::int64_t, gameplay::kMaxStations> scores{};
 };
 
 using BotFactory = std::function<std::unique_ptr<bots::BotController>(config::Difficulty, std::uint64_t seed)>;
@@ -93,6 +102,20 @@ public:
     const std::optional<MatchResult>& lastResult() const { return lastResult_; }
     const bots::BotController* bot(int station) const { return bots_[static_cast<std::size_t>(station)].get(); }
 
+    // High scores. The platform loads the tables at boot and tells the machine today's local date.
+    void setHighScores(HighScores h) { highScores_ = std::move(h); }
+    const HighScores& highScores() const { return highScores_; }
+    HighScores& highScores() { return highScores_; }
+    void setToday(std::string_view isoDate) { highScores_.setToday(isoDate); }
+    // A player shooting their initials (knocked out mid-match, or after the last round), if any.
+    const std::optional<InitialsEntry>& entry(int station) const { return entries_[static_cast<std::size_t>(station)]; }
+    bool entering(int station) const;
+    // Table the current match's scores go into (one per game mode).
+    std::string_view scoreTable() const { return kBattleTable; }
+    static constexpr std::string_view kBattleTable = "battle";
+    // Every table highscores.ini may hold.
+    static constexpr std::array<std::string_view, 1> kScoreTables{kBattleTable};
+
     std::vector<ArcadeEvent> takeEvents();
 
     // Durations (seconds), exposed for screens and tests.
@@ -100,8 +123,9 @@ public:
     static constexpr double kHowToTime = 8.0;
     static constexpr double kDemoMaxTime = 50.0;
     static constexpr double kDemoEndHold = 3.0;
-    static constexpr double kWinnersTime = 6.0;
+    static constexpr double kHighScoresTime = 9.0;
     static constexpr double kInsertCoinIdle = 30.0;
+    static constexpr double kInitialsHold = 1.2; // the saved names stay up this long before the results
 
 private:
     void enter(ArcadeState s);
@@ -112,6 +136,9 @@ private:
     void tickMatch(const ArcadeInput& input, bool demo);
     void handleCoins(const ArcadeInput& input);
     void tryJoin(int station);
+    void startEntry(int station);
+    void tickEntries(const ArcadeInput& input, double dt);
+    void tallySounds(bool demo);
     void updatePause();
     void sound(audio::SoundId id, bool demo = false);
     gameplay::MatchConfig matchConfig(bool demo);
@@ -137,6 +164,14 @@ private:
     std::unique_ptr<gameplay::Match> match_;
     std::array<std::unique_ptr<bots::BotController>, gameplay::kMaxStations> bots_{};
     std::optional<MatchResult> lastResult_;
+    HighScores highScores_;
+    std::array<std::optional<InitialsEntry>, gameplay::kMaxStations> entries_{};
+    std::array<bool, gameplay::kMaxStations> entryPending_{}; // knocked out: entry starts when the round end screen is over
+    std::array<bool, gameplay::kMaxStations> entryChecked_{}; // this match's score was already offered to the tables
+    double entriesDoneTime_ = 0.0;
+    int tallyTicks_ = 0; // round end screen sounds already played this tally
+    bool tallyDone_ = false;
+    bool tallyCrown_ = false;
     bool serviceOpen_ = false;
     bool suspended_ = false;
     std::vector<ArcadeEvent> events_;

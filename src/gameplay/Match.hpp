@@ -9,6 +9,7 @@
 #include "gameplay/MatchRules.hpp"
 #include "gameplay/Playfield.hpp"
 #include "gameplay/Rotor.hpp"
+#include "gameplay/Scoring.hpp"
 
 namespace spindle::gameplay {
 
@@ -35,6 +36,15 @@ struct Participant {
     int burnt = 0;        // needles their fire needles and purges burnt away
     int carriedCombo = 0; // fire-meter combo banked by clearing the previous round
     bool inRound = false; // plays the current (or upcoming) round
+
+    // Score (docs/RULES.md "Score").
+    std::int64_t score = 0;       // total over the match
+    std::int64_t roundPoints = 0; // earned while playing the current round (shown at its end)
+    std::int64_t roundBonus = 0;  // added at the last round end
+    std::int64_t scoreBefore = 0; // total before the last round end
+    int closeCalls = 0;
+    int bestCombo = 0;
+    int crownsWon = 0; // rounds won outright (most round points)
 };
 
 struct MatchConfig {
@@ -53,9 +63,13 @@ struct MatchConfig {
     int fireCombo = 8;
     double fireSeconds = 1.5;
     double fireChainWindow = 1.0;
+
+    // The round end screen (tally): how long it plays. Off = a plain resolveDelay pause.
+    scoring::TallyStyle tally = scoring::TallyStyle::Full;
 };
 
-enum class MatchPhase { Ready, Playing, Resolving, Over };
+// Tally: the round end screen (scores typed in, the crown moves) before the next round or the end.
+enum class MatchPhase { Ready, Playing, Tally, Over };
 
 enum class MatchEventType {
     RoundReady,     // value = round number
@@ -73,7 +87,10 @@ enum class MatchEventType {
     TryGained,      // station, value = tries now (mend)
     ShieldBroke,    // station
     Ignited,        // station: the station is on fire
-    Burned          // station, value = needles burnt away this tick
+    Burned,         // station, value = needles burnt away this tick
+    RoundScored,    // station, value = round points (one per player in the round, at its end)
+    CrownTaken,     // station, value = previous holder (-1 = nobody)
+    CrownLost       // station: the holder was knocked out
 };
 
 struct MatchEvent {
@@ -116,12 +133,21 @@ public:
     std::vector<int> standings() const;
     const RoundDecision& lastDecision() const { return lastDecision_; }
 
+    // Crown: the station that won a round outright most recently and still holds it (-1 = nobody).
+    int crownHolder() const { return crown_; }
+    int crownBefore() const { return crownBefore_; } // holder before the last round end (for the crown's flight)
+    // The round end screen of the last round: its timeline and who is in it.
+    const scoring::TallyTiming& tallyTiming() const { return tally_; }
+    bool tallied(int station) const { return station >= 0 && station < kMaxStations && tallied_[static_cast<std::size_t>(station)]; }
+
     std::vector<MatchEvent> takeEvents();
 
 private:
     void prepareRound();
     void startRound();
     void resolveRound();
+    void scoreRound(const std::vector<RoundOutcome>& outcomes);
+    void updateCrown();
     void emit(MatchEventType type, int station = -1, int value = 0) { events_.push_back({type, station, value}); }
 
     MatchConfig config_;
@@ -144,6 +170,10 @@ private:
     std::uint64_t roundStartTick_ = 0;
     double phaseTime_ = 0.0;
     RoundDecision lastDecision_;
+    int crown_ = -1;
+    int crownBefore_ = -1;
+    scoring::TallyTiming tally_{};
+    std::array<bool, kMaxStations> tallied_{};
     std::vector<MatchEvent> events_;
 };
 

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <format>
 
+#include <SDL3/SDL_time.h>
+
 #include "assets/ControllerDbPin.hpp"
 #include "config/AtomicFile.hpp"
 #include "engine/Branding.hpp"
@@ -18,6 +20,13 @@ namespace {
 constexpr std::uint64_t kTickNs = std::uint64_t{1'000'000'000} / static_cast<std::uint64_t>(gameplay::geom::kTickRate);
 constexpr int kMaxCatchUpTicks = 60; // 250 ms; beyond that the simulation drops time instead of spiralling
 } // namespace
+
+std::string localIsoDate() {
+    SDL_Time now = 0;
+    SDL_DateTime dt{};
+    if (!SDL_GetCurrentTime(&now) || !SDL_TimeToDateTime(now, &dt, true)) return {};
+    return std::format("{:04}-{:02}-{:02}", dt.year, dt.month, dt.day);
+}
 
 App::App(AppOptions options) : options_(std::move(options)) {}
 
@@ -73,9 +82,16 @@ input::TouchContext App::touchContext() const {
     }
     for (std::size_t i = 0; i < 4; ++i) c.columnEdges[i] = layout_.columns[i].x / layout_.width;
     c.columnEdges[4] = (layout_.columns[3].x + layout_.columns[3].w) / layout_.width;
-    if (arcade_->state() == arcade::ArcadeState::Playing) {
+    if (arcade_->state() == arcade::ArcadeState::Playing || arcade_->state() == arcade::ArcadeState::Initials) {
         c.screen = input::TouchScreen::Playing;
-        for (std::size_t i = 0; i < 4; ++i) c.humans[i] = arcade_->lineup().seats[i] == players::SeatKind::Human;
+        const gameplay::Match* m = arcade_->match();
+        for (std::size_t i = 0; i < 4; ++i) {
+            const int s = static_cast<int>(i);
+            c.entering[i] = arcade_->entering(s);
+            const bool human = arcade_->lineup().seats[i] == players::SeatKind::Human;
+            const bool stillIn = m && m->participant(s) && !m->participant(s)->eliminated && !m->over();
+            c.humans[i] = human && stillIn && arcade_->state() == arcade::ArcadeState::Playing;
+        }
     } else {
         c.screen = input::TouchScreen::Lobby;
     }
@@ -211,6 +227,7 @@ void App::tick(std::uint64_t tickEndNs) {
     ++ticks_;
     clockSeconds_ += dt;
     input::TickInput in = input_.drain(tickEndNs);
+    if (ticks_ % static_cast<std::uint64_t>(gameplay::geom::kTickRate) == 1) arcade_->setToday(localIsoDate()); // today's tables roll over at midnight
     for (int s : in.stationsLost) arcade_->stationDisconnected(s);
     for (int s : in.stationsRestored) arcade_->stationReconnected(s);
 
@@ -240,6 +257,7 @@ void App::handleArcadeEvents() {
         switch (e.type) {
         case arcade::ArcadeEventType::Sound: audio_.play(e.sound); break;
         case arcade::ArcadeEventType::SaveBookkeeping: saveBookkeeping(); break;
+        case arcade::ArcadeEventType::SaveHighScores: saveHighScores(); break;
         case arcade::ArcadeEventType::JoinRefused: audio_.play(audio::SoundId::MenuMove); break;
         default: break;
         }
@@ -317,6 +335,12 @@ void App::previewDisplay(const config::Settings::Display& d) {
 }
 
 void App::previewVolumes(const config::Settings::Audio& a) { audio_.setVolumes(a); }
+
+void App::saveHighScores() {
+    if (!arcade_) return;
+    std::string err;
+    if (!config::writeFileAtomic(paths_.highscores(), arcade_->highScores().serialize(), &err)) log::error("high scores: save failed: {}", err);
+}
 
 void App::saveBookkeeping() {
     if (!arcade_) return;

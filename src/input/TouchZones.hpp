@@ -17,7 +17,8 @@ enum class TouchScreen {
 
 struct TouchContext {
     TouchScreen screen = TouchScreen::Lobby;
-    std::array<bool, 4> humans{};      // stations played by humans (Playing)
+    std::array<bool, 4> humans{};      // stations still playing the match, played by humans (Playing)
+    std::array<bool, 4> entering{};    // stations shooting their initials (Playing): left / shoot / right thirds
     std::array<float, 5> columnEdges{0.0f, 0.25f, 0.5f, 0.75f, 1.0f}; // normalized x of the column borders
 };
 
@@ -37,6 +38,8 @@ bool inServiceCorner(float nx, float ny);
 int columnAt(const TouchContext& context, float nx);
 
 // What a finger touching down at (nx, ny) does; nothing in the corner, on a bot's column, or while ignored.
+// A column shooting initials splits into thirds: left = previous letter, middle = shoot, right = next
+// letter. When the only human left is entering initials, the whole screen splits that way.
 std::optional<TouchHit> touchHit(const TouchContext& context, float nx, float ny);
 
 } // namespace spindle::input

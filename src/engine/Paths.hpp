@@ -15,6 +15,7 @@ struct Paths {
 
     std::filesystem::path settings() const { return writable / "settings.ini"; }
     std::filesystem::path bookkeeping() const { return writable / "bookkeeping.ini"; }
+    std::filesystem::path highscores() const { return writable / "highscores.ini"; }
     std::filesystem::path logFile() const { return writable / "logs" / "spindle.log"; }
     std::filesystem::path controllerDb() const { return writable / "gamecontrollerdb.txt"; }
     std::filesystem::path screenshots() const { return writable / "screenshots"; }

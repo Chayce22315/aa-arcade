@@ -12,6 +12,8 @@ const char* actionName(Action a) {
     switch (a) {
     case Action::Fire: return "fire";
     case Action::Start: return "start";
+    case Action::Left: return "left";
+    case Action::Right: return "right";
     case Action::Coin: return "coin";
     case Action::ServiceCoin: return "service coin";
     case Action::Service: return "service";
@@ -27,7 +29,7 @@ const char* actionName(Action a) {
     return "?";
 }
 
-bool isStationAction(Action a) { return a == Action::Fire || a == Action::Start; }
+bool isStationAction(Action a) { return a == Action::Fire || a == Action::Start || a == Action::Left || a == Action::Right; }
 
 std::string canonicalKeyName(std::string_view name) {
     static constexpr std::array<std::pair<std::string_view, std::string_view>, 18> kAliases{{

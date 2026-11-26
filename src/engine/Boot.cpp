@@ -219,6 +219,11 @@ bool App::bootArcade() {
     const std::uint64_t entropy = (static_cast<std::uint64_t>(rd()) << 32) ^ rd() ^ SDL_GetTicksNS();
     arcade_ = std::make_unique<arcade::ArcadeMachine>(
         settings_, *levels_, [this](config::Difficulty d, std::uint64_t seed) { return makeBot(d, seed); }, std::move(bk), entropy);
+    if (auto text = config::readFile(paths_.highscores())) {
+        arcade_->setHighScores(arcade::HighScores::parse(config::IniDocument::parse(*text), arcade::ArcadeMachine::kScoreTables));
+        log::info("high scores: loaded");
+    }
+    arcade_->setToday(localIsoDate());
     service_ = std::make_unique<menus::ServiceMenu>(*this);
 
     input_.setTouchContext([this] { return touchContext(); });

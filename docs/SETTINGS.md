@@ -99,6 +99,7 @@ Round rules shared by every station. Speed values are uncalibrated: tune by feel
 | `fire_combo` | `8` | 4..30 | combo points to catch fire; a needle is 1, a close call 2 |
 | `fire_seconds` | `1.5` | 0.5..5.0 | seconds a player stays on fire |
 | `fire_chain_window` | `1.0` | 0.5..5.0 | seconds allowed between needles before the combo drops |
+| `round_end_screen` | `full` | full \| short \| off | full = scores are shot into the circles and the crown moves; short = the same, quicker; off = a plain pause |
 
 ### [Bots]
 
@@ -124,6 +125,7 @@ Coin and cabinet behaviour.
 | `join_window` | `10` | 3..30 | seconds other stations have to join after the first start |
 | `game_over_time` | `8` | 3..30 | seconds the results stay on screen |
 | `exit_hold_seconds` | `2` | 0..10 | hold the exit key this long to quit; 0 = locked cabinet (service menu only) |
+| `initials_seconds` | `15` | 10..30 | seconds a player has to shoot their initials into the high score table |
 
 ### [Keys.Player1]
 
@@ -133,6 +135,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `LCtrl` | text | launch a needle |
 | `start` | `1` | text | join / start |
+| `left` | `W` | text | previous letter / mode |
+| `right` | `D` | text | next letter / mode |
 
 ### [Keys.Player2]
 
@@ -140,6 +144,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `A` | text | launch a needle |
 | `start` | `2` | text | join / start |
+| `left` | `J` | text | previous letter / mode |
+| `right` | `K` | text | next letter / mode |
 
 ### [Keys.Player3]
 
@@ -147,6 +153,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `RCtrl` | text | launch a needle |
 | `start` | `3` | text | join / start |
+| `left` | `Left` | text | previous letter / mode |
+| `right` | `Right` | text | next letter / mode |
 
 ### [Keys.Player4]
 
@@ -154,6 +162,8 @@ Keyboard bindings: SDL scancode names, several keys separated by commas.
 |---|---|---|---|
 | `fire` | `L` | text | launch a needle |
 | `start` | `4` | text | join / start |
+| `left` | `F` | text | previous letter / mode |
+| `right` | `H` | text | next letter / mode |
 
 ### [Keys.System]
 

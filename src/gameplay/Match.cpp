@@ -78,6 +78,8 @@ void Match::prepareRound() {
         }
         p->inRound = suddenDeath_ ? std::find(suddenDeathSet_.begin(), suddenDeathSet_.end(), s) != suddenDeathSet_.end()
                                   : p->tries > 0;
+        p->roundPoints = 0;
+        p->roundBonus = 0;
         if (p->inRound) {
             f.begin(level_, fieldConfig);
             f.setCombo(suddenDeath_ ? 0 : p->carriedCombo);
@@ -108,8 +110,8 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
     case MatchPhase::Ready:
         if (phaseTime_ >= config_.readyDelay) startRound();
         return;
-    case MatchPhase::Resolving:
-        if (phaseTime_ >= config_.resolveDelay) {
+    case MatchPhase::Tally:
+        if (phaseTime_ >= tally_.total()) {
             if (overAfterResolve_) {
                 phase_ = MatchPhase::Over;
                 phaseTime_ = 0.0;
@@ -139,8 +141,14 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
         const int placedBefore = f.placed();
         f.step(tick_, geom::kTickSeconds, before, delta);
         for (int k = placedBefore; k < f.placed(); ++k) emit(MatchEventType::NeedlePlaced, s);
+        for (const scoring::Placement& pl : f.takePlacements()) {
+            p->roundPoints += scoring::placementPoints(pl, round_);
+            if (pl.closeCall) ++p->closeCalls;
+        }
+        p->bestCombo = std::max(p->bestCombo, f.combo());
         for (PowerupKind kind : f.takeClaims()) {
             ++p->powerupsClaimed;
+            p->roundPoints += scoring::powerupPoints(round_);
             emit(MatchEventType::PowerupClaimed, s, static_cast<int>(kind));
             if (kind == PowerupKind::Mend && !suddenDeath_ && p->tries < config_.tries) {
                 ++p->tries;
@@ -154,6 +162,7 @@ void Match::tick(const std::array<int, kMaxStations>& fireRequests) {
         }
         if (const int burnt = f.takeBurns(); burnt > 0) {
             p->burnt += burnt;
+            p->roundPoints += scoring::burnPoints(burnt, round_);
             emit(MatchEventType::Burned, s, burnt);
         }
         if (f.status() == FieldStatus::Cleared) emit(MatchEventType::StationCleared, s);
@@ -196,6 +205,8 @@ void Match::resolveRound() {
         // Clearing banks the combo for the next round; failing loses it.
         p->carriedCombo = o.cleared && !suddenDeath_ ? f.combo() : 0;
     }
+
+    scoreRound(outcomes);
 
     RoundDecision d = suddenDeath_ ? gameplay::resolveSuddenDeath(outcomes) : gameplay::resolveRound(players, outcomes, participantCount_);
     if (suddenDeath_ && d.rule == RuleCase::T7 && d.subRule == RuleCase::T4) {
@@ -258,8 +269,72 @@ void Match::resolveRound() {
               : d.kind == DecisionKind::SuddenDeath ? std::string("sudden death")
                                                     : std::string("next round"));
     lastDecision_ = std::move(d);
-    phase_ = MatchPhase::Resolving;
+    updateCrown();
+
+    int digits = 1;
+    for (int s = 0; s < kMaxStations; ++s)
+        if (tallied_[static_cast<std::size_t>(s)]) digits = std::max(digits, scoring::digitCount(participants_[static_cast<std::size_t>(s)]->score));
+    tally_ = scoring::tallyTiming(config_.tally, digits, config_.resolveDelay);
+    phase_ = MatchPhase::Tally;
     phaseTime_ = 0.0;
+}
+
+void Match::scoreRound(const std::vector<RoundOutcome>& outcomes) {
+    // The first clear (ties share it) earns a bonus when two or more players are in the round.
+    std::optional<std::uint64_t> firstClear;
+    for (const RoundOutcome& o : outcomes) {
+        if (!o.cleared) continue;
+        const std::uint64_t t = fields_[static_cast<std::size_t>(o.id)].clearTick();
+        if (!firstClear || t < *firstClear) firstClear = t;
+    }
+    tallied_.fill(false);
+    for (const RoundOutcome& o : outcomes) {
+        auto& p = participants_[static_cast<std::size_t>(o.id)];
+        const Playfield& f = fields_[static_cast<std::size_t>(o.id)];
+        scoring::ClearInfo info;
+        info.cleared = o.cleared;
+        if (o.cleared) {
+            const double used = static_cast<double>(f.clearTick() - roundStartTick_) * geom::kTickSeconds;
+            info.secondsLeft = config_.roundTimeLimit - used;
+            info.firstClear = outcomes.size() >= 2 && firstClear && f.clearTick() == *firstClear;
+        }
+        p->roundBonus = scoring::clearBonus(info, round_);
+        p->scoreBefore = p->score;
+        p->score = scoring::addCapped(p->score, p->roundPoints + p->roundBonus);
+        tallied_[static_cast<std::size_t>(o.id)] = true;
+        emit(MatchEventType::RoundScored, o.id, static_cast<int>(std::min<std::int64_t>(p->roundPoints, scoring::kMaxScore)));
+    }
+}
+
+void Match::updateCrown() {
+    // A holder knocked out loses the crown; the round's outright winner among those still in takes it.
+    crownBefore_ = crown_;
+    if (crown_ >= 0) {
+        const auto& h = participants_[static_cast<std::size_t>(crown_)];
+        if (!h || h->eliminated) {
+            emit(MatchEventType::CrownLost, crown_);
+            crown_ = -1;
+        }
+    }
+    std::int64_t best = 0;
+    std::vector<int> top;
+    for (int s = 0; s < kMaxStations; ++s) {
+        const auto& p = participants_[static_cast<std::size_t>(s)];
+        if (!tallied_[static_cast<std::size_t>(s)] || !p || p->eliminated || p->roundPoints <= 0) continue;
+        if (p->roundPoints > best) {
+            best = p->roundPoints;
+            top = {s};
+        } else if (p->roundPoints == best) {
+            top.push_back(s);
+        }
+    }
+    if (top.size() != 1) return; // nobody scored, or a tie: the crown stays where it is
+    auto& winner = participants_[static_cast<std::size_t>(top.front())];
+    ++winner->crownsWon;
+    if (crown_ == top.front()) return;
+    const int previous = crown_;
+    crown_ = top.front();
+    emit(MatchEventType::CrownTaken, crown_, previous);
 }
 
 std::vector<int> Match::standings() const {

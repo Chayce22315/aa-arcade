@@ -23,6 +23,9 @@
 
 namespace spindle {
 
+// Today's local date as YYYY-MM-DD (empty if the platform clock is unavailable).
+std::string localIsoDate();
+
 struct AppOptions {
     bool selftest = false;
     std::optional<std::filesystem::path> root;  // replaces the exe folder for all files
@@ -56,6 +59,7 @@ public:
     std::size_t settingsIssueCount() const override { return settingsIssues_; }
     std::string controllerDbSummary() const override;
     void saveBookkeeping() override;
+    void saveHighScores() override;
     void requestShutdown() override { requestQuit(0); }
     double frameMilliseconds() const override { return frameMs_; }
 

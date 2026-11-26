@@ -168,3 +168,24 @@ TEST_CASE(arcade_background_suspends_the_match_until_a_player_presses) {
     for (int i = 0; i < kSecond; ++i) m.tick({});
     CHECK(m.match()->tickCount() > frozen);
 }
+
+TEST_CASE(touch_initials_thirds_in_the_column_or_the_whole_screen) {
+    // The only human left is shooting initials: the whole screen is left / shoot / right.
+    TouchContext solo;
+    solo.screen = TouchScreen::Playing;
+    solo.entering = {false, true, false, false};
+    CHECK(input::touchHit(solo, 0.2f, 0.6f)->action == Action::Left);
+    CHECK(input::touchHit(solo, 0.5f, 0.6f)->action == Action::Fire);
+    CHECK(input::touchHit(solo, 0.9f, 0.6f)->action == Action::Right);
+    CHECK_EQ(input::touchHit(solo, 0.9f, 0.6f)->station, 1);
+    // Others still playing: only the entering column splits; the rest fire in their own columns.
+    TouchContext mixed = playing({true, false, false, true});
+    mixed.entering = {false, false, true, false};
+    CHECK(input::touchHit(mixed, 0.51f, 0.5f)->action == Action::Left);  // left third of column 3
+    CHECK(input::touchHit(mixed, 0.625f, 0.5f)->action == Action::Fire); // middle
+    CHECK(input::touchHit(mixed, 0.74f, 0.5f)->action == Action::Right);
+    CHECK_EQ(input::touchHit(mixed, 0.74f, 0.5f)->station, 2);
+    CHECK(input::touchHit(mixed, 0.1f, 0.5f)->action == Action::Fire);
+    CHECK_EQ(input::touchHit(mixed, 0.1f, 0.5f)->station, 0);
+    CHECK(!input::touchHit(mixed, 0.3f, 0.5f).has_value()); // a bot's column
+}

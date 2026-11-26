@@ -118,8 +118,10 @@ int Playfield::chainTicksLeft(std::uint64_t tick) const {
 void Playfield::setCombo(int combo) { combo_ = config_.fireEnabled ? std::clamp(combo, 0, std::max(0, config_.fireCombo - 1)) : 0; }
 
 void Playfield::scorePlacement(double nearestGap, std::uint64_t tick) {
+    const bool closeCall = nearestGap < kCloseCallFactor * minSeparation_;
+    newPlacements_.push_back({closeCall, comboFill(), onFire(tick), config_.fireEnabled});
     if (config_.fireEnabled && !onFire(tick)) {
-        const int points = nearestGap < kCloseCallFactor * minSeparation_ ? 2 : 1;
+        const int points = closeCall ? 2 : 1;
         const bool chained = lastPlaceTick_ && tick <= *lastPlaceTick_ + static_cast<std::uint64_t>(config_.chainWindowTicks);
         combo_ = chained ? combo_ + points : points;
         if (combo_ >= config_.fireCombo) ignite(tick);
@@ -231,6 +233,12 @@ int Playfield::takeShieldBreaks() {
     const int n = newShieldBreaks_;
     newShieldBreaks_ = 0;
     return n;
+}
+
+std::vector<scoring::Placement> Playfield::takePlacements() {
+    std::vector<scoring::Placement> out;
+    out.swap(newPlacements_);
+    return out;
 }
 
 int Playfield::takeIgnitions() {

@@ -166,6 +166,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(pageItem("coin settings", PageId::Coin));
         items.push_back(pageItem("bot settings", PageId::Bots));
         items.push_back(pageItem("bookkeeping", PageId::Bookkeeping));
+        items.push_back(pageItem("high scores", PageId::HighScores));
         MenuItem reset = actionItem("reset defaults", [this] {
             if (confirm("reset")) {
                 edit_ = host_.defaultSettings();
@@ -236,6 +237,8 @@ void ServiceMenu::build(PageId id) {
             auto& k = edit_.stationKeys[static_cast<std::size_t>(s)];
             items.push_back(keyItem(std::format("P{} fire", s + 1), k.fire));
             items.push_back(keyItem(std::format("P{} start", s + 1), k.start));
+            items.push_back(keyItem(std::format("P{} left", s + 1), k.left));
+            items.push_back(keyItem(std::format("P{} right", s + 1), k.right));
         }
         auto& sk = edit_.systemKeys;
         MenuItem coin = keyItem("coin", sk.coin);
@@ -370,6 +373,21 @@ void ServiceMenu::build(PageId id) {
         items.push_back(intItem("  combo to catch fire", edit_.gameplay.fireCombo, 4, 30));
         items.push_back(realItem("  seconds on fire", edit_.gameplay.fireSeconds, 0.5, 5.0, 0.25));
         items.push_back(realItem("  combo chain window", edit_.gameplay.fireChainWindow, 0.5, 5.0, 0.25));
+        MenuItem tally;
+        tally.label = "round end screen";
+        tally.separatorBefore = true;
+        tally.value = [this] {
+            switch (edit_.gameplay.roundEndScreen) {
+            case config::RoundEndScreen::Full: return std::string("full");
+            case config::RoundEndScreen::Short: return std::string("short");
+            case config::RoundEndScreen::Off: return std::string("off");
+            }
+            return std::string("full");
+        };
+        tally.adjust = [this](int dir) {
+            cycle(edit_.gameplay.roundEndScreen, {config::RoundEndScreen::Full, config::RoundEndScreen::Short, config::RoundEndScreen::Off}, dir);
+        };
+        items.push_back(std::move(tally));
         break;
     }
     case PageId::Coin: {
@@ -380,6 +398,7 @@ void ServiceMenu::build(PageId id) {
         items.push_back(intItem("max credits", edit_.arcade.maxCredits, 1, 99));
         items.push_back(intItem("join window", edit_.arcade.joinWindow, 3, 30, 1, " s"));
         items.push_back(intItem("game over time", edit_.arcade.gameOverTime, 3, 30, 1, " s"));
+        items.push_back(intItem("initials time", edit_.arcade.initialsSeconds, 10, 30, 1, " s"));
         MenuItem hold = intItem("exit hold", edit_.arcade.exitHoldSeconds, 0, 10, 1, " s");
         auto base = hold.value;
         hold.value = [this, base] { return edit_.arcade.exitHoldSeconds == 0 ? std::string("locked") : base(); };
@@ -418,6 +437,10 @@ void ServiceMenu::build(PageId id) {
         row("won by players", [&bk] { return std::to_string(bk.humanWins); });
         row("won by bots", [&bk] { return std::to_string(bk.botWins); });
         row("play time", [&bk] { return formatDuration(bk.playSeconds); });
+        for (std::size_t i = 0; i < bk.recentWinners.size(); ++i) {
+            const arcade::WinnerRecord w = bk.recentWinners[i];
+            row(i == 0 ? "recent winners" : "", [w] { return std::format("P{} {}  round {}", w.station + 1, w.bot ? "cpu" : "player", w.round); });
+        }
         MenuItem clear = actionItem("clear bookkeeping", [this, &bk] {
             if (confirm("clear")) {
                 bk.clearCounters();
@@ -427,6 +450,44 @@ void ServiceMenu::build(PageId id) {
             }
         });
         clear.value = [this] { return std::string(pendingConfirm_ == "clear" ? "press again to confirm" : ""); };
+        clear.separatorBefore = true;
+        items.push_back(std::move(clear));
+        break;
+    }
+    case PageId::HighScores: {
+        title = "high scores";
+        auto& hs = host_.arcadeMachine().highScores();
+        const auto addRows = [&](std::string_view table, bool today) {
+            const auto& t = today ? hs.tables(table).today : hs.tables(table).allTime;
+            MenuItem head;
+            head.label = std::format("{} - {}", table, today ? "today" : "all time");
+            head.value = [&t] { return t.empty() ? std::string("empty") : std::format("{} rows", t.rows().size()); };
+            head.enabled = false;
+            head.separatorBefore = true;
+            items.push_back(std::move(head));
+            for (std::size_t i = 0; i < t.rows().size(); ++i) {
+                const arcade::ScoreEntry e = t.rows()[i];
+                MenuItem m;
+                m.label = std::format("  {}  {}", i + 1, e.name);
+                m.value = [e] { return std::format("{}   round {}   {}", e.score, e.round, e.date); };
+                m.enabled = false;
+                items.push_back(std::move(m));
+            }
+        };
+        for (std::string_view table : arcade::ArcadeMachine::kScoreTables) {
+            addRows(table, false);
+            addRows(table, true);
+        }
+        MenuItem clear = actionItem("clear high scores", [this, &hs] {
+            if (confirm("clear scores")) {
+                hs.clearAll();
+                host_.saveHighScores();
+                notice_ = "high scores cleared";
+                noticeTime_ = 3.0;
+                rebuildPending_ = true;
+            }
+        });
+        clear.value = [this] { return std::string(pendingConfirm_ == "clear scores" ? "press again to confirm" : ""); };
         clear.separatorBefore = true;
         items.push_back(std::move(clear));
         break;
@@ -490,6 +551,10 @@ void ServiceMenu::handleTap(float nx, float ny) {
 
 void ServiceMenu::update(const input::TickInput& in, double dt) {
     if (!open_) return;
+    if (rebuildPending_) {
+        rebuildPending_ = false;
+        build(pageId_);
+    }
     if (!in.taps.empty()) touchMode_ = true;
     for (const auto& [tx, ty] : in.taps) {
         handleTap(tx, ty);
@@ -676,6 +741,13 @@ void ServiceMenu::drawInputTest(render::Renderer2D& r, const render::ScreenLayou
         else r.ring(b, 34 * u, 2 * u, colors::kDim);
         r.text("fire", {a.x, a.y + 50 * u}, 14 * u, colors::kDim, Align::Center);
         r.text("start", {b.x, b.y + 50 * u}, 14 * u, colors::kDim, Align::Center);
+        // Left / right as two small arrows between the buttons.
+        const bool left = in.stationHeld(s, input::Action::Left), right = in.stationHeld(s, input::Action::Right);
+        const float ay = l.area.y + 236 * u;
+        const render::Vec2 la[] = {{cx - 8 * u, ay - 10 * u}, {cx - 22 * u, ay}, {cx - 8 * u, ay + 10 * u}};
+        const render::Vec2 ra[] = {{cx + 8 * u, ay - 10 * u}, {cx + 22 * u, ay}, {cx + 8 * u, ay + 10 * u}};
+        r.polyline(la, left ? 4 * u : 2 * u, left ? colors::kWhite : colors::kDim);
+        r.polyline(ra, right ? 4 * u : 2 * u, right ? colors::kWhite : colors::kDim);
         const input::InputDevice* d = in.devices().controllerForStation(s);
         r.text(d ? d->name : std::string("keyboard only"), {cx, l.area.y + 380 * u}, 12 * u, colors::kDim, Align::Center);
     }

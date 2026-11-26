@@ -9,6 +9,8 @@ namespace spindle::input {
 enum class Action {
     Fire,
     Start,
+    Left,  // station: pick a letter / move a cursor
+    Right,
     Coin,
     ServiceCoin,
     Service,

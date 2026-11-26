@@ -179,6 +179,7 @@ MatchConfig ringConfig(int tries) {
     c.tries = tries;
     c.readyDelay = 0.5;
     c.resolveDelay = 0.5;
+    c.tally = scoring::TallyStyle::Off;
     c.roundTimeLimit = 20.0;
     c.seed = 3;
     c.powerups.assign(kAllPowerups.begin(), kAllPowerups.end());

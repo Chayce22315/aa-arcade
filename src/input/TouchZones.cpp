@@ -21,6 +21,23 @@ std::optional<TouchHit> touchHit(const TouchContext& c, float nx, float ny) {
     case TouchScreen::Lobby: return TouchHit{Action::Start, columnAt(c, nx)};
     case TouchScreen::Playing: {
         const int humans = static_cast<int>(std::count(c.humans.begin(), c.humans.end(), true));
+        const int entering = static_cast<int>(std::count(c.entering.begin(), c.entering.end(), true));
+        const auto thirds = [](float t, int station) {
+            if (t < 1.0f / 3.0f) return TouchHit{Action::Left, station};
+            if (t > 2.0f / 3.0f) return TouchHit{Action::Right, station};
+            return TouchHit{Action::Fire, station};
+        };
+        if (entering == 1 && humans == 0) {
+            const auto it = std::find(c.entering.begin(), c.entering.end(), true);
+            return thirds(nx, static_cast<int>(it - c.entering.begin()));
+        }
+        if (entering > 0) {
+            const int s = columnAt(c, nx);
+            if (c.entering[static_cast<std::size_t>(s)]) {
+                const float x0 = c.columnEdges[static_cast<std::size_t>(s)], x1 = c.columnEdges[static_cast<std::size_t>(s) + 1];
+                return thirds(x1 > x0 ? (nx - x0) / (x1 - x0) : 0.5f, s);
+            }
+        }
         if (humans == 1) {
             // One player (usually a phone against bots): the whole screen is their fire button.
             const auto it = std::find(c.humans.begin(), c.humans.end(), true);

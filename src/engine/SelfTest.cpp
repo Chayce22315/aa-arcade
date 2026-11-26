@@ -358,6 +358,19 @@ void SelfTest::build() {
     });
 
     // --- the four-station match
+    waitFor("round 1: the round end screen types the scores in", [this, M] {
+        if (!M()) return false;
+        drive({P::Spam, P::Oracle, P::Oracle, P::Oracle});
+        return M()->phase() == gameplay::MatchPhase::Tally && M()->phaseTime() >= M()->tallyTiming().breakdownStart() + 0.9;
+    }, 120);
+    add("round 1: every player is tallied, the careful ones scored", [this, M] {
+        for (int s = 0; s < 4; ++s) check(M()->tallied(s), std::format("P{} not on the round end screen", s + 1));
+        for (int s = 1; s < 4; ++s) check(M()->participant(s)->score > 0, std::format("P{} scored nothing", s + 1));
+        check(M()->participant(1)->roundBonus > 0, "no clear bonus for P2");
+        (void)this;
+        return true;
+    });
+    shot("18_round_end");
     waitFor("round 1: P1 misses, P2-P4 play carefully", [this, M] {
         if (!M()) return false;
         drive({P::Spam, P::Oracle, P::Oracle, P::Oracle});
@@ -390,6 +403,26 @@ void SelfTest::build() {
         const auto* d = app_.inputSystem().devices().controllerForStation(1);
         return !A().pausedForDisconnect() && d && d->id == ctl_[1].id;
     });
+    const auto driveMatch = [this, A, M] {
+        const gameplay::Match* m = M();
+        if (A().state() != ArcadeState::Playing || !m) return;
+        const int r = m->round();
+        drive({P::Spam, r >= 2 ? P::Spam : P::Oracle, r >= 3 ? P::Spam : P::Oracle, P::Oracle});
+    };
+    waitFor("crown: it flies to the round's outright winner", [A, M, driveMatch] {
+        driveMatch();
+        const gameplay::Match* m = M();
+        if (A().state() != ArcadeState::Playing || !m) return true;
+        const auto& t = m->tallyTiming();
+        return m->phase() == gameplay::MatchPhase::Tally && m->crownHolder() >= 0 && m->crownHolder() != m->crownBefore() &&
+               m->phaseTime() >= t.crownStart() + t.crown * 0.88;
+    }, 240);
+    add("crown: someone holds it", [this, M] {
+        check(M() && M()->crownHolder() >= 0, "nobody took the crown");
+        (void)this;
+        return true;
+    });
+    shot("19_crown");
     waitFor("round 4: powerup rings on the circles", [this, A, M] {
         const gameplay::Match* m = M();
         if (A().state() != ArcadeState::Playing || !m) return true;
@@ -401,6 +434,40 @@ void SelfTest::build() {
         return false;
     }, 120);
     shot("15_powerup_rings");
+    // P1 is out by now with a score: they shoot their initials in their own column (W / D pick a letter,
+    // left ctrl shoots it) while the others play on.
+    waitFor("initials: P1's entry starts in its column", [A, driveMatch] {
+        driveMatch();
+        return A().entering(0) || A().state() != ArcadeState::Playing;
+    }, 240);
+    const auto typeKeys = [this, driveMatch](std::vector<SDL_Scancode> keys) {
+        auto i = std::make_shared<std::size_t>(0);
+        auto wait = std::make_shared<int>(0);
+        return [this, driveMatch, keys, i, wait] {
+            driveMatch();
+            if (*i < keys.size()) {
+                if (tick_ % 5 == 0) tapKey(keys[(*i)++]);
+                return false;
+            }
+            return ++*wait > 6;
+        };
+    };
+    add("initials: shoot A, then C", typeKeys({SDL_SCANCODE_LCTRL, SDL_SCANCODE_D, SDL_SCANCODE_D, SDL_SCANCODE_LCTRL}));
+    add("initials: P1 has typed AC", [this, A] {
+        check(A().entering(0) && A().entry(0)->typed() == "AC", std::format("typed '{}'", A().entry(0) ? A().entry(0)->typed() : "-"));
+        return true;
+    });
+    shot("20_initials_in_column");
+    add("initials: shoot E, then turn back to end and shoot it",
+        typeKeys({SDL_SCANCODE_D, SDL_SCANCODE_D, SDL_SCANCODE_LCTRL, SDL_SCANCODE_W, SDL_SCANCODE_W, SDL_SCANCODE_W, SDL_SCANCODE_W,
+                  SDL_SCANCODE_W, SDL_SCANCODE_LCTRL}));
+    add("initials: ACE is in the table", [this, A] {
+        const auto& rows = A().highScores().tables(A().scoreTable()).allTime.rows();
+        const bool found = std::any_of(rows.begin(), rows.end(), [](const arcade::ScoreEntry& e) { return e.name == "ACE"; });
+        check(found, "ACE not saved");
+        check(!A().entering(0), "P1 still entering");
+        return true;
+    });
     waitFor("fire: a careful player chains needles until the circle catches fire", [this, A, M] {
         const gameplay::Match* m = M();
         if (A().state() != ArcadeState::Playing || !m) return true;
@@ -451,6 +518,10 @@ void SelfTest::build() {
     });
     shot("08_game_over");
     waitFor("game over: back to attract with no credits", [A] { return A().state() == ArcadeState::Attract; }, 10);
+    waitFor("attract: the high score page comes round", [A] { return A().state() == ArcadeState::Attract && A().attractPage() == AttractPage::HighScores; },
+            120);
+    add("attract: let the table draw", settle(0.5));
+    shot("21_high_scores");
     add("controllers: unplug all", once([this] {
         for (int s = 1; s < 4; ++s) detach(s);
     }));
@@ -646,6 +717,7 @@ void SelfTest::build() {
         }
     }));
     waitFor("touch: the menu closes", [this] { return !app_.serviceMenu().isOpen(); }, 5);
+    add("touch: start from empty high score tables", once([this] { app_.arcadeMachine().highScores().clearAll(); }));
     add("touch: insert a coin", taps(SDL_SCANCODE_5, 1));
     waitFor("touch: 1 credit", [A] { return A().credits().credits() == 1; });
     add("touch: tap station 2's column", once([this, columnPoint] {
@@ -667,8 +739,29 @@ void SelfTest::build() {
     shot("17_touch_play");
     waitFor("touch: keep tapping until the match is over", [this, A] {
         if (A().state() == ArcadeState::Playing && tick_ % 3 == 0) tapScreen(0.5f, 0.5f);
-        return A().state() == ArcadeState::GameOver;
+        return A().state() == ArcadeState::GameOver || A().state() == ArcadeState::Initials;
     }, 120);
+    add("touch: a high score - the screen splits into left / shoot / right", [this, A] {
+        check(A().state() == ArcadeState::Initials && A().entering(1), "station 2 is not shooting initials");
+        return true;
+    });
+    const auto tapSeq = [this](std::vector<float> xs) {
+        auto i = std::make_shared<std::size_t>(0);
+        return [this, xs, i] {
+            if (*i >= xs.size()) return true;
+            if (tick_ % 6 == 0) tapScreen(xs[(*i)++], 0.55f);
+            return false;
+        };
+    };
+    add("touch: shoot A, tap right, shoot B", tapSeq({0.5f, 0.9f, 0.5f}));
+    add("touch: let it draw", settle(0.3));
+    add("touch: station 2 typed AB", [this, A] {
+        check(A().entry(1) && A().entry(1)->typed() == "AB", std::format("typed '{}'", A().entry(1) ? A().entry(1)->typed() : "-"));
+        return true;
+    });
+    shot("22_touch_initials");
+    add("touch: tap left twice to end, shoot it", tapSeq({0.1f, 0.1f, 0.5f}));
+    waitFor("touch: saved, then the results", [A] { return A().state() == ArcadeState::GameOver; }, 10);
     waitFor("touch: back to attract", [A] { return A().state() == ArcadeState::Attract; }, 10);
 }
 

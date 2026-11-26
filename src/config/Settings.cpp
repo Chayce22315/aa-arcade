@@ -28,6 +28,8 @@ constexpr Choice<FullscreenMode> kFullscreenAliases[] = {
     {"no", FullscreenMode::Windowed},    {"off", FullscreenMode::Windowed}};
 constexpr Choice<Difficulty> kDifficultyChoices[] = {
     {"easy", Difficulty::Easy}, {"normal", Difficulty::Normal}, {"hard", Difficulty::Hard}, {"expert", Difficulty::Expert}};
+constexpr Choice<RoundEndScreen> kRoundEndChoices[] = {
+    {"full", RoundEndScreen::Full}, {"short", RoundEndScreen::Short}, {"off", RoundEndScreen::Off}};
 constexpr Choice<AssignmentMode> kAssignmentChoices[] = {{"auto", AssignmentMode::Auto}, {"fixed", AssignmentMode::Fixed}};
 constexpr Choice<DisconnectAction> kDisconnectChoices[] = {{"pause", DisconnectAction::Pause},
                                                            {"continue", DisconnectAction::Continue}};
@@ -149,6 +151,8 @@ void visitAll(Settings& s, V& v) {
     v.integer("fire_combo", s.gameplay.fireCombo, 4, 30, "combo points to catch fire; a needle is 1, a close call 2");
     v.real("fire_seconds", s.gameplay.fireSeconds, 0.5, 5.0, "seconds a player stays on fire");
     v.real("fire_chain_window", s.gameplay.fireChainWindow, 0.5, 5.0, "seconds allowed between needles before the combo drops");
+    v.choice("round_end_screen", s.gameplay.roundEndScreen, choices(kRoundEndChoices),
+             "full = scores are shot into the circles and the crown moves; short = the same, quicker; off = a plain pause");
 
     v.section("Bots", "Computer players follow exactly the same rules as humans.");
     v.integer("singleplayer_bots", s.bots.singleplayerBots, 0, 3, "bots joining a game with exactly one human");
@@ -164,11 +168,14 @@ void visitAll(Settings& s, V& v) {
     v.integer("join_window", s.arcade.joinWindow, 3, 30, "seconds other stations have to join after the first start");
     v.integer("game_over_time", s.arcade.gameOverTime, 3, 30, "seconds the results stay on screen");
     v.integer("exit_hold_seconds", s.arcade.exitHoldSeconds, 0, 10, "hold the exit key this long to quit; 0 = locked cabinet (service menu only)");
+    v.integer("initials_seconds", s.arcade.initialsSeconds, 10, 30, "seconds a player has to shoot their initials into the high score table");
 
     for (int i = 0; i < kStationCount; ++i) {
         v.section(std::format("Keys.Player{}", i + 1), i == 0 ? "Keyboard bindings: SDL scancode names, several keys separated by commas." : "");
         v.text("fire", s.stationKeys[static_cast<std::size_t>(i)].fire, false, "launch a needle");
         v.text("start", s.stationKeys[static_cast<std::size_t>(i)].start, false, "join / start");
+        v.text("left", s.stationKeys[static_cast<std::size_t>(i)].left, false, "previous letter / mode");
+        v.text("right", s.stationKeys[static_cast<std::size_t>(i)].right, false, "next letter / mode");
     }
 
     v.section("Keys.System", "Cabinet and service keys.");

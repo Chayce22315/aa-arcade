@@ -1,6 +1,7 @@
 #include "arcade/ArcadeMachine.hpp"
 
 #include <algorithm>
+#include <format>
 
 #include "engine/Log.hpp"
 #include "gameplay/Geometry.hpp"
@@ -20,6 +21,7 @@ const char* arcadeStateName(ArcadeState s) {
     case ArcadeState::InsertCoin: return "insert coin";
     case ArcadeState::Join: return "join";
     case ArcadeState::Playing: return "playing";
+    case ArcadeState::Initials: return "initials";
     case ArcadeState::GameOver: return "game over";
     }
     return "attract";
@@ -106,9 +108,14 @@ void ArcadeMachine::enter(ArcadeState s) {
     state_ = s;
     stateTime_ = 0.0;
     if (s != ArcadeState::Playing) suspended_ = false;
-    if (s != ArcadeState::GameOver && s != ArcadeState::Playing) {
+    if (s != ArcadeState::GameOver && s != ArcadeState::Playing && s != ArcadeState::Initials) {
         match_.reset();
         for (auto& b : bots_) b.reset();
+    }
+    if (s == ArcadeState::Attract || s == ArcadeState::InsertCoin || s == ArcadeState::Join) {
+        for (auto& e : entries_) e.reset();
+        entryPending_.fill(false);
+        entryChecked_.fill(false);
     }
     if (s == ArcadeState::Attract || s == ArcadeState::Join || s == ArcadeState::InsertCoin) {
         joined_.fill(false);
@@ -142,6 +149,11 @@ gameplay::MatchConfig ArcadeMachine::matchConfig(bool demo) {
     c.fireCombo = settings_.gameplay.fireCombo;
     c.fireSeconds = settings_.gameplay.fireSeconds;
     c.fireChainWindow = settings_.gameplay.fireChainWindow;
+    switch (settings_.gameplay.roundEndScreen) {
+    case config::RoundEndScreen::Full: c.tally = gameplay::scoring::TallyStyle::Full; break;
+    case config::RoundEndScreen::Short: c.tally = gameplay::scoring::TallyStyle::Short; break;
+    case config::RoundEndScreen::Off: c.tally = gameplay::scoring::TallyStyle::Off; break;
+    }
     return c;
 }
 
@@ -175,6 +187,9 @@ void ArcadeMachine::startMatch() {
               lineup_.bots, match_->config().seed);
     matchSeconds_ = 0.0;
     lastResult_.reset();
+    for (auto& e : entries_) e.reset();
+    entryPending_.fill(false);
+    entryChecked_.fill(false);
     events_.push_back({ArcadeEventType::MatchStarted, audio::SoundId::RoundStart, -1});
     events_.push_back({ArcadeEventType::SaveBookkeeping, audio::SoundId::Coin, -1});
     state_ = ArcadeState::Playing;
@@ -190,7 +205,10 @@ void ArcadeMachine::endMatch() {
     r.standings = match_->standings();
     r.finalRound = match_->round();
     for (int s = 0; s < gameplay::kMaxStations; ++s)
-        if (const auto& p = match_->participant(s)) r.roundsCleared[static_cast<std::size_t>(s)] = p->roundsCleared;
+        if (const auto& p = match_->participant(s)) {
+            r.roundsCleared[static_cast<std::size_t>(s)] = p->roundsCleared;
+            r.scores[static_cast<std::size_t>(s)] = p->score;
+        }
     if (r.winner >= 0) {
         const bool bot = lineup_.seats[static_cast<std::size_t>(r.winner)] == players::SeatKind::Bot;
         bookkeeping_.addWinner({r.winner, bot, r.finalRound});
@@ -205,8 +223,51 @@ void ArcadeMachine::endMatch() {
     lastResult_ = std::move(r);
     events_.push_back({ArcadeEventType::MatchEnded, audio::SoundId::Winner, -1});
     events_.push_back({ArcadeEventType::SaveBookkeeping, audio::SoundId::Coin, -1});
-    state_ = ArcadeState::GameOver;
+    // Everyone still to be offered a table (survivors, the winner, the last round's knock-outs) gets
+    // their chance now; the results wait while anyone is shooting initials.
+    for (int s = 0; s < gameplay::kMaxStations; ++s) startEntry(s);
+    const bool anyEntering = std::any_of(entries_.begin(), entries_.end(), [](const auto& e) { return e && !e->done(); });
+    state_ = anyEntering ? ArcadeState::Initials : ArcadeState::GameOver;
     stateTime_ = 0.0;
+    entriesDoneTime_ = 0.0;
+}
+
+bool ArcadeMachine::entering(int station) const {
+    if (station < 0 || station >= gameplay::kMaxStations) return false;
+    const auto& e = entries_[static_cast<std::size_t>(station)];
+    return e && !e->done();
+}
+
+void ArcadeMachine::startEntry(int station) {
+    const auto i = static_cast<std::size_t>(station);
+    entryPending_[i] = false;
+    if (entryChecked_[i] || !match_ || lineup_.seats[i] != players::SeatKind::Human) return;
+    const auto& p = match_->participant(station);
+    if (!p) return;
+    entryChecked_[i] = true;
+    const int round = p->eliminated ? p->eliminatedRound : match_->round();
+    const std::string fallback = std::format("P{}", station + 1);
+    const std::uint32_t token = highScores_.reserve(scoreTable(), p->score, round, fallback);
+    if (token == 0) return;
+    entries_[i].emplace(station, token, static_cast<double>(settings_.arcade.initialsSeconds), fallback);
+    events_.push_back({ArcadeEventType::SaveHighScores, audio::SoundId::Coin, station}); // the row is held under the fallback name
+    log::info("arcade: station {} made the {} table with {} - shooting initials", station + 1, scoreTable(), p->score);
+}
+
+void ArcadeMachine::tickEntries(const ArcadeInput& input, double dt) {
+    for (int s = 0; s < gameplay::kMaxStations; ++s) {
+        auto& e = entries_[static_cast<std::size_t>(s)];
+        if (!e || e->done()) continue;
+        const int shotsBefore = e->shots();
+        e->tick(input.stations[static_cast<std::size_t>(s)], dt);
+        if (e->shots() != shotsBefore && !e->done()) sound(audio::SoundId::LetterShot);
+        if (e->done()) {
+            highScores_.finish(e->token(), e->name());
+            sound(audio::SoundId::InitialsDone);
+            events_.push_back({ArcadeEventType::SaveHighScores, audio::SoundId::Coin, s});
+            log::info("arcade: station {} saved '{}'{}", s + 1, e->name(), e->timedOut() ? " (time ran out)" : "");
+        }
+    }
 }
 
 void ArcadeMachine::handleCoins(const ArcadeInput& input) {
@@ -244,6 +305,36 @@ void ArcadeMachine::tryJoin(int station) {
     log::info("arcade: station {} joined", station + 1);
 }
 
+// The round end screen's sounds, on the core's timeline: a rising tick per digit, a chord when the
+// number is in, the crown fanfare when it changes hands.
+void ArcadeMachine::tallySounds(bool demo) {
+    if (match_->phase() != gameplay::MatchPhase::Tally) {
+        tallyTicks_ = 0;
+        tallyDone_ = false;
+        tallyCrown_ = false;
+        return;
+    }
+    const auto& t = match_->tallyTiming();
+    const double e = match_->phaseTime();
+    if (t.perDigit > 0.0) {
+        int landed = 0;
+        for (int k = 0; k < t.digits; ++k)
+            if (e >= t.digitLand(k)) ++landed;
+        constexpr audio::SoundId kTicks[] = {audio::SoundId::TallyTick1, audio::SoundId::TallyTick2, audio::SoundId::TallyTick3,
+                                             audio::SoundId::TallyTick4};
+        for (; tallyTicks_ < landed; ++tallyTicks_) sound(kTicks[std::min(tallyTicks_, 3)], demo);
+        if (!tallyDone_ && e >= t.breakdownStart()) {
+            tallyDone_ = true;
+            sound(audio::SoundId::TallyDone, demo);
+        }
+    }
+    const int holder = match_->crownHolder();
+    if (!tallyCrown_ && e >= t.crownStart() && holder >= 0 && holder != match_->crownBefore()) {
+        tallyCrown_ = true;
+        sound(audio::SoundId::Crown, demo);
+    }
+}
+
 void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
     if (!match_) return;
     std::array<int, gameplay::kMaxStations> fire{};
@@ -258,6 +349,7 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
     }
     match_->tick(fire);
     if (!match_->paused() && !demo) matchSeconds_ += gameplay::geom::kTickSeconds;
+    tallySounds(demo);
     for (const gameplay::MatchEvent& e : match_->takeEvents()) {
         switch (e.type) {
         case gameplay::MatchEventType::RoundStarted:
@@ -274,6 +366,12 @@ void ArcadeMachine::tickMatch(const ArcadeInput& input, bool demo) {
         case gameplay::MatchEventType::ShieldBroke: sound(audio::SoundId::Shield, demo); break;
         case gameplay::MatchEventType::Ignited: sound(audio::SoundId::Ignite, demo); break;
         case gameplay::MatchEventType::Burned: sound(audio::SoundId::Burn, demo); break;
+        case gameplay::MatchEventType::Eliminated:
+            // A knocked-out player may have a high score: they shoot their initials once this round's
+            // end screen is over, in their own column, while the others play on.
+            if (!demo && e.station >= 0 && lineup_.seats[static_cast<std::size_t>(e.station)] == players::SeatKind::Human)
+                entryPending_[static_cast<std::size_t>(e.station)] = true;
+            break;
         default: break;
         }
     }
@@ -300,10 +398,10 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
             tickMatch(input, true);
             if (match_ && match_->over()) demoOverTime_ += dt;
             if (demoOverTime_ >= kDemoEndHold || pageTime_ >= kDemoMaxTime)
-                enterAttractPage(bookkeeping_.recentWinners.empty() ? AttractPage::Title : AttractPage::Winners);
+                enterAttractPage(highScores_.anyEntries() ? AttractPage::HighScores : AttractPage::Title);
             break;
-        case AttractPage::Winners:
-            if (pageTime_ >= kWinnersTime) enterAttractPage(AttractPage::Title);
+        case AttractPage::HighScores:
+            if (pageTime_ >= kHighScoresTime) enterAttractPage(AttractPage::Title);
             break;
         }
         for (int s = 0; s < gameplay::kMaxStations && state_ == ArcadeState::Attract; ++s)
@@ -360,8 +458,22 @@ void ArcadeMachine::tick(const ArcadeInput& input) {
             // Pressing start at a station whose controller vanished hands it to that station's keys.
             if (stationWaitingForReconnect(s) && input.stations[static_cast<std::size_t>(s)].startPressed) stationReconnected(s);
         }
+        tickEntries(input, dt);
         tickMatch(input, false);
+        if (match_ && match_->phase() != gameplay::MatchPhase::Tally)
+            for (int s = 0; s < gameplay::kMaxStations; ++s)
+                if (entryPending_[static_cast<std::size_t>(s)]) startEntry(s);
         if (match_ && match_->over()) endMatch();
+        break;
+    }
+    case ArcadeState::Initials: {
+        tickEntries(input, dt);
+        const bool anyEntering = std::any_of(entries_.begin(), entries_.end(), [](const auto& e) { return e && !e->done(); });
+        if (!anyEntering) entriesDoneTime_ += dt;
+        if (entriesDoneTime_ >= kInitialsHold) {
+            state_ = ArcadeState::GameOver;
+            stateTime_ = 0.0;
+        }
         break;
     }
     }
