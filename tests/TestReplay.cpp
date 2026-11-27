@@ -171,4 +171,24 @@ TEST_CASE(replay_the_record_game_is_kept_and_shown_before_its_table) {
     }
     CHECK(sawReplay);
     CHECK(sawTable);
+
+    // A player starting while the record game plays gets a match of their own: their presses count and
+    // the replay is gone (it once kept feeding its presses into the new match).
+    for (int i = 0; i < 400 * kSecond && !(m.state() == arcade::ArcadeState::Attract && m.attractPage() == arcade::AttractPage::Replay); ++i)
+        m.tick({});
+    REQUIRE(m.attractPage() == arcade::AttractPage::Replay);
+    for (int i = 0; i < 2 * kSecond; ++i) m.tick({}); // well into the record game
+    m.tick(start);
+    m.tick(start);
+    CHECK(m.showingReplay() == nullptr);
+    for (int i = 0; i < 20 * kSecond && m.state() == arcade::ArcadeState::Vote; ++i) m.tick({});
+    REQUIRE(m.state() == arcade::ArcadeState::Playing);
+    for (int i = 0; i < 10 * kSecond && m.match()->phase() != gameplay::MatchPhase::Playing; ++i) m.tick({});
+    REQUIRE(m.match()->phase() == gameplay::MatchPhase::Playing);
+    const int before = m.match()->field(0).needlesLeft();
+    arcade::ArcadeInput shoot;
+    shoot.stations[0].firePresses = 1;
+    m.tick(shoot);
+    m.tick({});
+    CHECK(m.match()->field(0).needlesLeft() < before);
 }
